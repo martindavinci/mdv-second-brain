@@ -1,0 +1,14 @@
+{
+  "name": "mdv-second-brain",
+  "owner": {
+    "name": "Martin DaVinci"
+  },
+  "plugins": [
+    {
+      "name": "mdv-second-brain",
+      "source": "./",
+      "description": "Keeps an Obsidian-compatible second-brain vault per workspace while you work."
+    }
+  ],
+  "description": "Second brain for Claude Code (mdv-second-brain)."
+}

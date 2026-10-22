@@ -1,0 +1,12 @@
+{
+  "name": "mdv-second-brain",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claude Code plugin that keeps an Obsidian-compatible second-brain vault per workspace while you work.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}

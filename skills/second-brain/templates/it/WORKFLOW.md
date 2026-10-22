@@ -1,7 +1,7 @@
 # Workflow
 
 ## Intake
-Classifica ogni lavoro: bug, feature, refactor, roadmap, domanda. Indica il progetto (una cartella in `20_Projects/`) o nessuno.
+Classifica ogni lavoro: bug, feature, refactor, roadmap, domanda. Indica il progetto (un hub in `20_Projects/`) o nessuno.
 Domande, letture, esplorazione e ritocchi banali non creano nulla.
 
 ## Dove va cosa

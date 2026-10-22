@@ -52,7 +52,7 @@ function sessionContext(env, ws, sid, cwd) {
     } catch {}
   }
   o.dailyFile = dailyFile;
-  o.projectNoteExists = !!o.project && fs.existsSync(path.join(v, '20_Projects', o.project, `${o.project}.md`));
+  o.projectNoteExists = !!o.project && !!require('./lib/projects').findHub(v, o.project);
   o.relatedHints = o.project && !o.projectNoteExists && r.mappedDir ? relatedCandidates(r.mappedDir, raw) : [];
   return buildSessionContext(o);
 }

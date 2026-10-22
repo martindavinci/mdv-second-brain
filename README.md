@@ -110,11 +110,12 @@ Home.md  AGENTS.md  WORKFLOW.md  TOOLS.md  DECISIONS.md  MEMORY.md
 10_Notes/
   Features/  Tasks/  Issues/                   work without a project
   <note>.md                                    knowledge that spans projects
-20_Projects/<project>/
+20_Projects/
   <project>.md                                 hub: what the project is now
-  <project> — <Topic>.md                       distilled knowledge
-  <project> — Post Mortem YYYY-MM-DD.md
-  Features/  Tasks/  Issues/
+  <project>/                                   created once there is something to put in it
+    <project> — <Topic>.md                     distilled knowledge
+    <project> — Post Mortem YYYY-MM-DD.md
+    Features/  Tasks/  Issues/
 80_Assets/
 90_Archive/                                    mirrors the original paths
 secrets.local.md  *.local.md  .brain/          never committed

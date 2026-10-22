@@ -1,7 +1,7 @@
 # Workflow
 
 ## Intake
-Classify each piece of work: bug, feature, refactor, roadmap, question. Name its project (a folder in `20_Projects/`) or none.
+Classify each piece of work: bug, feature, refactor, roadmap, question. Name its project (a hub in `20_Projects/`) or none.
 Questions, reads, exploration and trivial touch-ups create nothing.
 
 ## Where things go

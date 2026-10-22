@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const frontmatter = require('./frontmatter');
 const { projectName, unwrapLink } = require('./names');
+const projects = require('./projects');
 
 const CONTEXT_MAX = 2500;
 const SKIP_TOP = new Set(['80_Assets', 'node_modules']);
@@ -23,8 +24,8 @@ function context(ctx, project) {
   const p = project ? projectName(project) : null;
   const out = [];
   if (p) {
-    const hub = path.join(ctx.vault, '20_Projects', p, `${p}.md`);
-    if (fs.existsSync(hub)) {
+    const hub = projects.findHub(ctx.vault, p);
+    if (hub) {
       const body = frontmatter.parse(fs.readFileSync(hub, 'utf8')).body;
       const lines = body.split('\n');
       const heads = lines.filter((l) => /^## /.test(l));
@@ -33,7 +34,7 @@ function context(ctx, project) {
         if (/^#/.test(l)) break;
         if (l.trim() || para.length) para.push(l);
       }
-      out.push(`project ${p} — hub 20_Projects/${p}/${p}.md`, clip(para.join('\n').trim(), 800), `sections: ${heads.join(' · ') || 'none'}`);
+      out.push(`project ${p} — hub ${path.relative(ctx.vault, hub).replace(/\\/g, '/')}`, clip(para.join('\n').trim(), 800), `sections: ${heads.join(' · ') || 'none'}`);
     } else out.push(`project ${p} — no hub yet`);
   } else out.push('workspace level (no project)');
   const all = tasks.listItems(ctx, p ? { project: p } : {});
@@ -86,7 +87,7 @@ function search(ctx, query, { project, type, limit = 10, archive = false } = {})
     if (type && kind !== type) continue;
     if (wantProject) {
       const rel = path.relative(ctx.vault, file).split(path.sep);
-      const p = (unwrapLink(data.project) || (rel[0] === '20_Projects' ? rel[1] : '') || '').toLowerCase();
+      const p = (unwrapLink(data.project) || (rel[0] === '20_Projects' ? rel[1].replace(/\.md$/, '') : '') || '').toLowerCase();
       if (p !== wantProject) continue;
     }
     let best = null;

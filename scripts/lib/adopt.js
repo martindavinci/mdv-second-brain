@@ -128,10 +128,9 @@ function planAdopt(src, now = new Date()) {
     add(`10_Notes/${e.name}`, `${dir}/${e.name}`);
   }
 
+  // Hubs sit next to their project folder: one still inside it moves out.
   for (const e of entries(path.join(src, '20_Projects'))) {
-    if (!e.isFile() || !e.name.endsWith('.md')) continue;
-    const p = e.name.replace(/\.md$/, '');
-    add(`20_Projects/${e.name}`, `20_Projects/${p}/${e.name}`);
+    if (e.isDirectory() && fs.existsSync(path.join(src, '20_Projects', e.name, `${e.name}.md`))) add(`20_Projects/${e.name}/${e.name}.md`, `20_Projects/${e.name}.md`);
   }
 
   let boardLaneMap = {};

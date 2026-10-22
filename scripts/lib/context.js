@@ -25,7 +25,7 @@ function head({ ws, vault, lang, cli, cliConfig, sid, dailyFile, marker, needsIn
 
 function projectBlock({ project, projectNoteExists, relatedHints, inProgress }) {
   const lines = [];
-  if (project) lines.push(projectNoteExists ? `project: ${project} (hub 20_Projects/${project}/${project}.md)` : `project: ${project} — create 20_Projects/${project}/${project}.md when there is real content`);
+  if (project) lines.push(projectNoteExists ? `project: ${project} (hub 20_Projects/${project}.md)` : `project: ${project} — create 20_Projects/${project}.md (brain project add) when there is real content`);
   else lines.push('project: none (workspace level)');
   if (project && !projectNoteExists && relatedHints && relatedHints.length) {
     lines.push(`possibly related projects: ${relatedHints.join(', ')} — link them in the hub only if the work confirms it`);

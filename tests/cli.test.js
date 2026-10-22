@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const { join } = require('node:path');
-const { read, makeVault, io } = require('./helpers');
+const { read, write, makeVault, io } = require('./helpers');
 const { main } = require('../scripts/brain');
 const { defaults, saveConfig } = require('../scripts/lib/config');
 
@@ -89,11 +89,44 @@ test('cli feature add creates a proposed feature without a card', async () => {
 test('cli project add creates the hub from the template, once', async () => {
   const { cfgFile, code, vault: v } = makeVault();
   assert.equal(await main(['--config', cfgFile, 'project', 'add', 'alpha'], { cwd: code, ...io() }), 0);
-  const hub = join(v, '20_Projects', 'alpha', 'alpha.md');
+  const hub = join(v, '20_Projects', 'alpha.md');
+  assert.ok(!fs.existsSync(join(v, '20_Projects', 'alpha')), 'no project folder until there is something to put in it');
   assert.match(read(hub), /^---\ntype: project\nstatus: active\ndepends_on: \[\]\nused_by: \[\]\nsource_of: \[\]\nrelated: \[\]/);
   assert.match(read(hub), /<!-- brain:project-index -->/);
   const o = io();
   assert.equal(await main(['--config', cfgFile, 'project', 'add', 'alpha'], { cwd: code, ...o }), 6);
+});
+
+test('cli index moves a hub still inside its project folder next to it, and reads either layout before that', async () => {
+  const { cfgFile, code, vault: v } = makeVault();
+  write(join(v, '20_Projects', 'alpha', 'alpha.md'), '---\ntype: project\n---\n# alpha\n\nLegacy hub.\n\n<!-- brain:project-index -->\n<!-- /brain:project-index -->\n');
+  write(join(v, '20_Projects', 'alpha', 'Issues', 'Broken.md'), '---\ntype: issue\nstatus: todo\n---\n# Broken\n');
+  write(join(v, '20_Projects', 'beta', 'beta.md'), '---\ntype: project\n---\n# beta\n');
+  let o = io();
+  assert.equal(await main(['--config', cfgFile, 'context', '--project', 'alpha'], { cwd: code, ...o }), 0);
+  assert.match(o.text(), /hub 20_Projects\/alpha\/alpha\.md/);
+  o = io();
+  assert.equal(await main(['--config', cfgFile, 'index'], { cwd: code, ...o }), 0, o.errText());
+  assert.match(o.text(), /2 hubs moved/);
+  assert.match(read(join(v, '20_Projects', 'alpha.md')), /Legacy hub\.[\s\S]*\[\[Broken\]\]/);
+  assert.ok(fs.existsSync(join(v, '20_Projects', 'alpha', 'Issues', 'Broken.md')));
+  assert.ok(!fs.existsSync(join(v, '20_Projects', 'alpha', 'alpha.md')));
+  assert.ok(!fs.existsSync(join(v, '20_Projects', 'beta')), 'an emptied project folder goes away');
+  assert.match(read(join(v, 'Home.md')), /\[\[alpha\]\][\s\S]*\[\[beta\]\]/);
+  o = io();
+  assert.equal(await main(['--config', cfgFile, 'context', '--project', 'alpha'], { cwd: code, ...o }), 0);
+  assert.match(o.text(), /hub 20_Projects\/alpha\.md/);
+});
+
+test('cli index reports a project with a hub in both places and moves neither', async () => {
+  const { cfgFile, code, vault: v } = makeVault();
+  write(join(v, '20_Projects', 'alpha.md'), '---\ntype: project\n---\n# alpha\n\nNew hub.\n');
+  write(join(v, '20_Projects', 'alpha', 'alpha.md'), '---\ntype: project\n---\n# alpha\n\nOld hub.\n');
+  const o = io();
+  assert.equal(await main(['--config', cfgFile, 'index'], { cwd: code, ...o }), 0, o.errText());
+  assert.match(o.text(), /hub conflict: alpha/);
+  assert.match(read(join(v, '20_Projects', 'alpha.md')), /New hub\./);
+  assert.match(read(join(v, '20_Projects', 'alpha', 'alpha.md')), /Old hub\./);
 });
 
 test('cli postmortem add writes the dated note in the project folder', async () => {

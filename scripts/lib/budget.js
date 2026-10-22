@@ -5,17 +5,11 @@ const path = require('node:path');
 const frontmatter = require('./frontmatter');
 const { defaults } = require('./config');
 const { parseYmd } = require('./names');
+const projects = require('./projects');
 
 const budgetsOf = (ctx) => ({ ...defaults().budgets, ...(ctx.budgets || {}) });
 const rel = (ctx, f) => path.relative(ctx.vault, f).replace(/\\/g, '/');
 
-function projectDirs(vault) {
-  try {
-    return fs.readdirSync(path.join(vault, '20_Projects'), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
-  } catch {
-    return [];
-  }
-}
 
 function check(ctx) {
   const tasks = require('./tasks');
@@ -24,14 +18,16 @@ function check(ctx) {
   const over = (file, chars, budget) => {
     if (chars > budget) out.push({ file: rel(ctx, file), chars, budget });
   };
-  for (const p of projectDirs(ctx.vault)) {
-    const dir = path.join(ctx.vault, '20_Projects', p);
+  for (const p of projects.projectNames(ctx.vault)) {
+    const hub = projects.findHub(ctx.vault, p);
+    if (hub) over(hub, fs.readFileSync(hub, 'utf8').length, b.hub);
+    const dir = projects.projectDir(ctx.vault, p);
+    if (!fs.existsSync(dir)) continue;
     for (const f of fs.readdirSync(dir)) {
-      if (!f.endsWith('.md')) continue;
       const file = path.join(dir, f);
+      if (!f.endsWith('.md') || file === hub) continue;
       const text = fs.readFileSync(file, 'utf8');
-      if (f === `${p}.md`) over(file, text.length, b.hub);
-      else if (frontmatter.parse(text).data.type !== 'postmortem') over(file, text.length, b.note);
+      if (frontmatter.parse(text).data.type !== 'postmortem') over(file, text.length, b.note);
     }
   }
   for (const file of tasks.itemFiles(ctx.vault, ['feature'])) over(file, fs.readFileSync(file, 'utf8').length, b.note);

@@ -462,6 +462,9 @@ function cmdAdopt(env, args) {
 function runIndex(env, ctx) {
   const { cfg } = env;
   const now = new Date();
+  const projects = require('./lib/projects');
+  const hubsMoved = projects.migrateHubs(ctx.vault).length;
+  const hubConflicts = projects.hubConflicts(ctx.vault);
   const archived = tasks.archiveDone(ctx, now, cfg.archiveAfterDays);
   const ideasArchived = require('./lib/ideas').archiveIdeas(ctx, now, cfg.archiveAfterDays);
   const budget = require('./lib/budget');
@@ -475,13 +478,13 @@ function runIndex(env, ctx) {
   fs.writeFileSync(path.join(ctx.vault, '.brain', 'oversize.json'), JSON.stringify(oversize, null, 2) + '\n');
   state.prune(ctx.vault, stateDirOf(env), now);
   state.markCliWrite(ctx.vault, ctx.sid);
-  return { archived: archived.length, ideasArchived, rotated, decisions, dailies: dailies.length, oversize };
+  return { hubsMoved, hubConflicts, archived: archived.length, ideasArchived, rotated, decisions, dailies: dailies.length, oversize };
 }
 
 function cmdIndex(env) {
   const { ctx } = workspaceCtx(env);
   const r = runIndex(env, ctx);
-  return out(env, r, `index: ${r.archived} cards archived, ${r.ideasArchived} ideas archived, ${r.rotated} logs rotated, ${r.decisions} decisions archived, ${r.dailies} dailies archived${r.oversize.length ? `; oversize: ${r.oversize.map((o) => o.file).join(', ')}` : ''}`);
+  return out(env, r, `index: ${r.archived} cards archived, ${r.ideasArchived} ideas archived, ${r.rotated} logs rotated, ${r.decisions} decisions archived, ${r.dailies} dailies archived${r.hubsMoved ? `, ${r.hubsMoved} hubs moved to 20_Projects/<project>.md` : ''}${r.hubConflicts.length ? `; hub conflict: ${r.hubConflicts.join(', ')} (keep one of 20_Projects/<project>.md and 20_Projects/<project>/<project>.md)` : ''}${r.oversize.length ? `; oversize: ${r.oversize.map((o) => o.file).join(', ')}` : ''}`);
 }
 
 // Identity for one commit of this workspace; null = let git resolve it (global, or the host repo's own).

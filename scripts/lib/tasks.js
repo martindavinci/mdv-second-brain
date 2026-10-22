@@ -300,7 +300,7 @@ function addProjectHub(ctx, raw, { summary } = {}) {
   const p = projectName(raw);
   const existing = findNote(ctx.vault, p);
   if (existing) throw nameTaken(p, existing);
-  const file = path.join(ctx.vault, '20_Projects', p, `${p}.md`);
+  const file = require('./projects').hubFile(ctx.vault, p);
   const day = today(ctx);
   const data = { type: 'project', status: 'active', depends_on: [], used_by: [], source_of: [], related: [], created: day, updated: day };
   const body = templates.fill(templates.load(ctx.lang, 'project.md'), { title: p, summary: summary || '—' });

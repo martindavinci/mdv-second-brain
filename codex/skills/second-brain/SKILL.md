@@ -41,7 +41,7 @@ Triggers: task completed, bug fixed, decision taken, the user says a part is fin
 1. Move the card (`brain task done "<Name>"` or `brain issue done "<Name>"`).
 2. Distil what lasts, following the vault's WORKFLOW.md:
    - feature note in the project's `Features/` (`brain feature add "<Name>"` when missing): implementation table ✅🟡❌🔒, rules, lessons; `lifecycle` proposed | available | retired, never "completed";
-   - project knowledge (architecture, build/run/release, conventions, gotchas, how-to) → hub `20_Projects/<p>/<p>.md` (`brain project add <p>` when missing); a section past the hub budget → `<p> — <Topic>.md` in the same folder, linked from the hub;
+   - project knowledge (architecture, build/run/release, conventions, gotchas, how-to) → hub `20_Projects/<p>.md` (`brain project add <p>` when missing); a section past the hub budget → `<p> — <Topic>.md` in `20_Projects/<p>/`, linked from the hub;
    - post mortem → `brain postmortem add "<title>"`, fill every section, lessons also into the feature;
    - cross-project finding → one line in `MEMORY.md` or a loose note in `10_Notes/`;
    - stable decision → one line `- YYYY-MM-DD — <choice> → [[note]]` in `DECISIONS.md`, details in the note.

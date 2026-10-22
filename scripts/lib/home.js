@@ -5,6 +5,7 @@ const path = require('node:path');
 const markers = require('./markers');
 const boards = require('./boards');
 const templates = require('./templates');
+const projects = require('./projects');
 
 const TEXT = {
   en: { cols: ['Project', 'Board', 'In Progress', 'ToDo', 'Bugs', 'Ideas', 'Last activity'], none: '—', board: 'Board', features: 'Features', work: 'Open work', ideas: 'Open ideas', notes: 'Notes' },
@@ -13,15 +14,7 @@ const TEXT = {
 const T = (ctx) => TEXT[ctx.lang] || TEXT.en;
 const isLocal = (name) => name.endsWith('.local');
 
-function hubs(vault) {
-  try {
-    return fs.readdirSync(path.join(vault, '20_Projects'), { withFileTypes: true })
-      .filter((e) => e.isDirectory() && fs.existsSync(path.join(vault, '20_Projects', e.name, `${e.name}.md`)))
-      .map((e) => e.name);
-  } catch {
-    return [];
-  }
-}
+const hubs = (vault) => projects.projectsWithHub(vault);
 
 const boardLink = (ctx, p) => (p && boards.isSplit(ctx, p) ? `[[${p} Plan]]` : `[[${path.basename(ctx.boardFile, '.md')}]]`);
 
@@ -53,7 +46,7 @@ function featureInfo(ctx) {
 
 function hubIndex(ctx, p, items, ideaList, features) {
   const t = T(ctx);
-  const dir = path.join(ctx.vault, '20_Projects', p);
+  const dir = projects.projectDir(ctx.vault, p);
   const lines = [`${t.board}: ${boardLink(ctx, p)}`];
   const feats = features.filter((f) => f.project === p).sort((a, b) => a.name.localeCompare(b.name));
   if (feats.length) lines.push('', `${t.features}:`, ...feats.map((f) => `- [[${f.name}]] (${f.lifecycle})`));
@@ -61,7 +54,7 @@ function hubIndex(ctx, p, items, ideaList, features) {
   if (open.length) lines.push('', `${t.work}:`, ...open.map((i) => `- [[${i.name}]] — ${i.status}${i.blocked ? ' 🔒' : ''}`));
   const openIdeas = ideaList.filter((i) => i.project === p && i.state === 'open').length;
   if (openIdeas) lines.push('', `${t.ideas}: ${openIdeas}`);
-  const notes = fs.readdirSync(dir).filter((f) => f.endsWith('.md') && f !== `${p}.md`).map((f) => f.slice(0, -3)).filter((n) => !isLocal(n)).sort();
+  const notes = (fs.existsSync(dir) ? fs.readdirSync(dir) : []).filter((f) => f.endsWith('.md') && f !== `${p}.md`).map((f) => f.slice(0, -3)).filter((n) => !isLocal(n)).sort();
   if (notes.length) lines.push('', `${t.notes}:`, ...notes.map((n) => `- [[${n}]]`));
   return lines.join('\n');
 }
@@ -96,7 +89,7 @@ function rebuildHome(ctx) {
   writeIfChanged(homeFile, home);
 
   for (const p of hubs(ctx.vault)) {
-    const hubFile = path.join(ctx.vault, '20_Projects', p, `${p}.md`);
+    const hubFile = projects.findHub(ctx.vault, p);
     writeIfChanged(hubFile, markers.setSection(fs.readFileSync(hubFile, 'utf8'), 'project-index', hubIndex(ctx, p, items, ideaList, features)));
   }
 }

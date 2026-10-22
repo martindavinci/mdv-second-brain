@@ -45,7 +45,7 @@ test('session-start in a mapped folder injects a capped context naming no other 
   assert.match(c, /--session sess-0001-abcdef/);
   assert.match(c, /session:sess-000/);
   assert.match(c, /AGENTS\.md/);
-  assert.match(c, /create 20_Projects\/repo\/repo\.md/);
+  assert.match(c, /create 20_Projects\/repo\.md/);
   assert.doesNotMatch(c, /beta/);
   assert.ok(c.length <= 2500, String(c.length));
   assert.ok(fs.existsSync(join(e.alphaVault, 'Home.md')));

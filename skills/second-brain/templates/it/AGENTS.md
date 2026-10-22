@@ -7,7 +7,7 @@ Gestito da un agente AI (mdv-second-brain). Queste regole hanno la precedenza su
 - Storia, righe mai rimosse (si marcano, oppure la CLI le sposta in `90_Archive/`): task, issue, post mortem, daily, `DECISIONS.md`, `MEMORY.md`, `Ideas.md`.
 - Mai toccare le sezioni scritte dall'utente.
 - Link con `[[Nome]]`: i nomi delle note sono unici nel vault; non rinominare note senza motivo.
-- Rispetta la struttura: una cartella per progetto in `20_Projects/<progetto>/`, conoscenza trasversale in `10_Notes/`.
+- Rispetta la struttura: un hub per progetto in `20_Projects/<progetto>.md`, le sue note in `20_Projects/<progetto>/`, conoscenza trasversale in `10_Notes/`.
 - Stati espliciti; ogni nota indica il suo progetto.
 - Nessuna sezione vuota: una sezione o una nota esiste solo con contenuto reale.
 - Contenuto generato (`Bugs.md`, `Features.md`, testo tra i marker `<!-- brain:… -->`) è ricostruito dalla CLI: mai modificarlo a mano.

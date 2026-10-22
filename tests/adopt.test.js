@@ -77,11 +77,13 @@ test('existing kanban board under 00_Work is detected and moved', () => {
   assert.deepEqual(plan.boardLaneMap, { 'To Do': 'todo', Doing: 'in-progress', Done: 'completed' });
 });
 
-test('<Name> Plan.md of a known project becomes a split project; flat project note moves into its folder', () => {
+test('<Name> Plan.md of a known project becomes a split project; a hub inside its folder moves next to it', () => {
   const { src } = fixture();
+  write(join(src, '20_Projects', 'beta', 'beta.md'), '---\ntype: project\n---\n# beta\n');
   const plan = adopt.planAdopt(src, new Date());
   assert.equal(movedTo(plan, '00_Work/alpha Plan.md'), '00_Inbox/alpha/alpha Plan.md');
-  assert.equal(movedTo(plan, '20_Projects/alpha.md'), '20_Projects/alpha/alpha.md');
+  assert.equal(movedTo(plan, '20_Projects/alpha.md'), undefined);
+  assert.equal(movedTo(plan, '20_Projects/beta/beta.md'), '20_Projects/beta.md');
 });
 
 test('dry run changes nothing', async () => {
@@ -106,7 +108,7 @@ test('apply moves files, rewrites links, converts TASKS.md, deletes nothing, kee
   assert.ok(fs.existsSync(join(src, '00_Inbox', 'Daily', `${today}.md`)));
   assert.ok(fs.existsSync(join(src, '10_Notes', 'Features', 'Exporter.md')));
   assert.ok(fs.existsSync(join(src, '00_Inbox', 'alpha', 'alpha Plan.md')));
-  assert.ok(fs.existsSync(join(src, '20_Projects', 'alpha', 'alpha.md')));
+  assert.ok(fs.existsSync(join(src, '20_Projects', 'alpha.md')));
   assert.equal(read(join(src, 'AGENTS.md')), 'my own agent rules\n');
   assert.ok(fs.existsSync(join(src, 'WORKFLOW.md')));
   assert.match(read(join(src, '10_Notes', 'Linker.md')), /See \[\[Plan\]\] and \[\[Exporter\|the exporter\]\]\./);

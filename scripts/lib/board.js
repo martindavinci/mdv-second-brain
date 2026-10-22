@@ -78,16 +78,35 @@ function cardLine({ checked, text }) {
   return `- [${checked ? 'x' : ' '}] ${text}`;
 }
 
-function appendCard(lane, card) {
+// Inserts a card (its line plus any sub-lines) after the last card of the lane.
+function appendCardLines(lane, lines) {
   const all = cards(lane);
   if (all.length) {
-    lane.lines.splice(cardSpan(lane, all[all.length - 1].index), 0, cardLine(card));
+    lane.lines.splice(cardSpan(lane, all[all.length - 1].index), 0, ...lines);
     return;
   }
   if (lane.lines[0] !== '') lane.lines.unshift('');
-  lane.lines.splice(1, 0, cardLine(card));
-  const rest = lane.lines.slice(2);
-  if (rest.length < 2 || rest[0] !== '') lane.lines.splice(2, 0, '');
+  lane.lines.splice(1, 0, ...lines);
+  const rest = lane.lines.slice(1 + lines.length);
+  if (rest[0] !== '') lane.lines.splice(1 + lines.length, 0, '');
+}
+
+function appendCard(lane, card) {
+  appendCardLines(lane, [cardLine(card)]);
+}
+
+function ensureLane(b, title) {
+  const found = b.lanes.find((l) => l.title === title);
+  if (found) return found;
+  const lane = { title, rawTitle: `## ${title}`, lines: [''] };
+  const last = b.lanes[b.lanes.length - 1];
+  if (last && last.lines[last.lines.length - 1] !== '') last.lines.push('');
+  b.lanes.push(lane);
+  return lane;
+}
+
+function ensureStatusLane(b, status) {
+  return findLaneByStatus(b, status) || ensureLane(b, LANES[status]);
 }
 
 function removeCardByLink(b, link) {
@@ -103,4 +122,11 @@ function removeCardByLink(b, link) {
   return null;
 }
 
-module.exports = { LANES, STATUSES, emptyBoard, parseBoard, serializeBoard, cards, laneStatus, findLaneByStatus, appendCard, removeCardByLink, cardLine, linkOf, cardSpan };
+function emptyArchiveBoard() {
+  return '---\n\nkanban-plugin: board\n\n---\n\n' + SETTINGS + '\n```\n{"kanban-plugin":"board"}\n```\n%%\n';
+}
+
+module.exports = {
+  LANES, STATUSES, emptyBoard, emptyArchiveBoard, parseBoard, serializeBoard, cards, laneStatus, findLaneByStatus,
+  appendCard, appendCardLines, ensureLane, ensureStatusLane, removeCardByLink, cardLine, linkOf, cardSpan,
+};

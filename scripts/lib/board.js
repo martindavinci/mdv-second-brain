@@ -88,10 +88,14 @@ function appendCardLines(lane, lines) {
     lane.lines.splice(cardSpan(lane, all[all.length - 1].index), 0, ...lines);
     return;
   }
-  if (lane.lines[0] !== '') lane.lines.unshift('');
-  lane.lines.splice(1, 0, ...lines);
-  const rest = lane.lines.slice(1 + lines.length);
-  if (rest[0] !== '') lane.lines.splice(1 + lines.length, 0, '');
+  // the Kanban plugin's "**Complete**" lane marker stays above the cards
+  const complete = lane.lines.findIndex((l) => l.trim() === '**Complete**');
+  let at = 1;
+  if (complete >= 0) at = complete + 1;
+  else if (lane.lines[0] !== '') lane.lines.unshift('');
+  lane.lines.splice(at, 0, ...lines);
+  const rest = lane.lines.slice(at + lines.length);
+  if (rest[0] !== '') lane.lines.splice(at + lines.length, 0, '');
 }
 
 function appendCard(lane, card) {

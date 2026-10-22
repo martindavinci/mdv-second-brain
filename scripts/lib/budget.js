@@ -69,7 +69,11 @@ function rotateLogs(ctx) {
     const name = path.basename(file, '.md');
     const link = `→ [[${name} — Log]]`;
     const [heading, ...rest] = sec.split('\n');
-    const entries = entriesOf(rest.filter((l) => l.trim() && l.trim() !== link));
+    // blank lines inside an entry belong to it; only the trailing ones of the section are dropped
+    const body0 = rest.filter((l) => l.trim() !== link);
+    while (body0.length && !body0[body0.length - 1].trim()) body0.pop();
+    while (body0.length && !body0[0].trim()) body0.shift();
+    const entries = entriesOf(body0);
     const keep = [];
     let size = heading.length + link.length + 2;
     for (let i = entries.length - 1; i >= 0; i--) {

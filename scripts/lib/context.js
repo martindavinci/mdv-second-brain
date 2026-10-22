@@ -12,7 +12,7 @@ function head({ ws, vault, lang, cli, sid, dailyFile, marker, needsInit }) {
   const lines = [
     `[second-brain] workspace=${ws} vault=${vault} lang=${lang || 'unset'}`,
     `cli: ${cliCmd(cli, sid)}`,
-    `daily: ${dailyFile} — your section marker: ${marker} (created on your first edit; keep its Status/Next/Open current)`,
+    `daily: ${dailyFile} — your section marker: ${marker}; update it only with \`checkpoint --status … --next … --open … --log …\`, never by editing the file`,
     'Read AGENTS.md, WORKFLOW.md and TOOLS.md of the vault once per context, before your first write there.',
     'Rules: (1) keep your checkpoint and the active task (Status, TODO, Log) current while you work; when a piece is done, distil it and run `commit`.',
     '(2) Never mention or link another workspace. (3) Never ask the user mid-task: queue questions for the end.',
@@ -51,9 +51,17 @@ function buildSessionContext(o) {
   return clip(text, CAP);
 }
 
-function switchContext({ ws, vault, dailyFile, marker, cli, sid }) {
+function switchContext({ ws, vault, dailyFile, marker, cli, sid, back = false }) {
+  if (back) {
+    return [
+      `[second-brain] back in workspace=${ws} vault=${vault}`,
+      `cli: ${cliCmd(cli, sid)} (use exactly this line again, without any workspace flag)`,
+      `daily: ${dailyFile} — your section marker: ${marker}`,
+      'Notes about this work go to this vault only.',
+    ].join('\n');
+  }
   return [
-    `[second-brain] you are now also working in workspace=${ws} vault=${vault}`,
+    `[second-brain] you are now working in workspace=${ws} vault=${vault}`,
     `cli: ${cliCmd(cli, sid)} --workspace ${ws}`,
     `daily: ${dailyFile} — your section marker: ${marker}`,
     `Read AGENTS.md, WORKFLOW.md and TOOLS.md of this vault before writing there. Keep this workspace's notes about this workspace only.`,

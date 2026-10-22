@@ -60,9 +60,9 @@ function languageError(name) {
   return new CliError(4, `language-required: run: brain init ${name} --language <code>`);
 }
 
-function ensure(env, name, language) {
+function ensure(env, name, language, repair = false) {
   try {
-    return vault.ensureVault(env.cfg, name, { language, cfgFile: env.cfgFile });
+    return vault.ensureVault(env.cfg, name, { language, cfgFile: env.cfgFile, repair });
   } catch (e) {
     if (e.message === 'language-required') throw languageError(name);
     throw e;
@@ -219,15 +219,17 @@ function cmdInit(env, args) {
     if (!GIT_MODES.includes(mode)) throw new CliError(2, `bad --git-mode: use ${GIT_MODES.join(' | ')}`);
     ws = { paths: [dir], git: { mode } };
     if (str(flags.vault)) ws.vault = path.resolve(env.cwd, str(flags.vault));
+    vault.assertNoOverlap(cfg, name, ws.vault || path.join(cfg.root, name));
     const identity = str(flags.identity) || 'detected';
     if (mode !== 'none' && identity === 'detected') {
-      // the include path must be relative to the .git of the repo that will be committed
+      // remembered per workspace and passed to each commit (`git -c`): shared repos never accumulate identities
       const vaultDir = ws.vault || path.join(cfg.root, name);
-      const repoDir = mode === 'single' ? cfg.root : mode === 'host' ? git.toplevel(vaultDir) : vaultDir;
-      const id = repoDir ? git.detectIdentity(dir, { vaultDir: repoDir }) : null;
-      const hostResolves = mode === 'host' && id && id.source === 'repo';
-      if (id && !hostResolves && id.source === 'gitconfig-file') ws.git.config = { 'include.path': id.includePath };
-      else if (id && !hostResolves && id.source !== 'global') ws.git.config = { 'user.name': id.name, 'user.email': id.email };
+      const id = git.detectIdentity(dir, { vaultDir });
+      if (id && id.source !== 'global') {
+        ws.git.identity = { name: id.name, email: id.email, ...(id.file ? { file: id.file } : {}) };
+        // the vault's own repo also gets it in its config, so manual commits there match
+        if (mode === 'per-workspace') ws.git.config = id.source === 'gitconfig-file' ? { 'include.path': id.includePath } : { 'user.name': id.name, 'user.email': id.email };
+      }
     }
     cfg.workspaces[name] = ws;
   } else if (!(ws.paths || []).some((p) => isInside(dir, p)) && !isInside(dir, config.vaultPathFor(cfg, name))) {
@@ -235,7 +237,7 @@ function cmdInit(env, args) {
   }
   if (str(flags.language) && (!ws.language || ws.language === 'auto')) ws.language = str(flags.language);
   config.saveConfig(cfg, env.cfgFile);
-  const v = ensure(env, name, str(flags.language));
+  const v = ensure(env, name, str(flags.language), true);
   bind(env, name, false);
   return out(env, { workspace: name, vault: v.vault }, `brain active: ${name} → ${v.vault}`);
 }
@@ -266,6 +268,7 @@ function cmdWorkspace(env, sub, args) {
       const ws = cfg.workspaces[name] || { paths: [] };
       for (const p of list(flags.path)) if (!ws.paths.includes(path.resolve(env.cwd, p))) ws.paths.push(path.resolve(env.cwd, p));
       if (str(flags.vault)) ws.vault = path.resolve(env.cwd, str(flags.vault));
+      vault.assertNoOverlap(cfg, name, ws.vault || path.join(cfg.root, name));
       if (str(flags.language)) ws.language = str(flags.language);
       if (str(flags.board)) ws.board = str(flags.board);
       cfg.workspaces[name] = ws;
@@ -392,6 +395,7 @@ function cmdAdopt(env, args) {
   if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) throw new CliError(2, `not a folder: ${src}`);
   const existing = env.cfg.workspaces[ws];
   if (existing && existing.vault && path.resolve(existing.vault) !== src) throw new CliError(2, `workspace ${ws} already has another vault`);
+  vault.assertNoOverlap(env.cfg, ws, src);
   const plan = adopt.planAdopt(src, new Date());
   if (!env.flags.apply) {
     const lines = [
@@ -427,6 +431,7 @@ function runIndex(env, ctx) {
   const oversize = budget.check(ctx);
   fs.mkdirSync(path.join(ctx.vault, '.brain'), { recursive: true });
   fs.writeFileSync(path.join(ctx.vault, '.brain', 'oversize.json'), JSON.stringify(oversize, null, 2) + '\n');
+  state.prune(ctx.vault, stateDirOf(env), now);
   state.markCliWrite(ctx.vault, ctx.sid);
   return { archived: archived.length, ideasArchived, rotated, decisions, dailies: dailies.length, oversize };
 }
@@ -437,8 +442,29 @@ function cmdIndex(env) {
   return out(env, r, `index: ${r.archived} cards archived, ${r.ideasArchived} ideas archived, ${r.rotated} logs rotated, ${r.decisions} decisions archived, ${r.dailies} dailies archived${r.oversize.length ? `; oversize: ${r.oversize.map((o) => o.file).join(', ')}` : ''}`);
 }
 
+// Identity for one commit of this workspace; null = let git resolve it (global, or the host repo's own).
+function commitIdentity(cfg, name, repo) {
+  const ws = cfg.workspaces[name] || {};
+  const id = ws.git && ws.git.identity;
+  if (!id) return null;
+  if (vault.gitModeFor(cfg, name) === 'host' && git.localIdentity(repo)) return null;
+  if (id.file && fs.existsSync(id.file)) {
+    const read = (key) => {
+      try {
+        return git.run(path.dirname(id.file), ['config', '-f', id.file, '--get', key]);
+      } catch {
+        return null;
+      }
+    };
+    const fromFile = { name: read('user.name'), email: read('user.email') };
+    if (fromFile.name && fromFile.email) return fromFile;
+  }
+  return { name: id.name, email: id.email };
+}
+
 function cmdCommit(env) {
   const secrets = require('./lib/secrets');
+  const msg = requireArg(str(env.flags.m) || str(env.flags.message), '-m <message>');
   const { name, ctx } = workspaceCtx(env);
   runIndex(env, ctx);
   const repo = vault.repoFor(env.cfg, name, ctx.vault);
@@ -449,8 +475,7 @@ function cmdCommit(env) {
   const hits = secrets.scanChanged(repo.repo, repo.pathspec);
   if (hits.length) throw new CliError(5, hits.map((h) => `secrets found: ${h.file}:${h.line} (${h.kind}) — move to secrets.local.md`).join('\n'));
   vault.applyGitConfig(env.cfg, name, repo.repo);
-  const msg = requireArg(str(env.flags.m) || str(env.flags.message), '-m <message>');
-  const r = git.commitPath(repo.repo, repo.pathspec, msg.startsWith('brain:') ? msg : `brain: ${msg}`);
+  const r = git.commitPath(repo.repo, repo.pathspec, msg.startsWith('brain:') ? msg : `brain: ${msg}`, { identity: commitIdentity(env.cfg, name, repo.repo) });
   return out(env, r, r.committed ? 'committed' : r.reason === 'no-changes' ? 'nothing to commit' : 'git unavailable');
 }
 
@@ -458,6 +483,32 @@ function cmdContext(env) {
   const { name: ws, ctx } = workspaceCtx(env);
   const text = require('./lib/retrieve').context(ctx, cwdProject(env, ws));
   return out(env, { text }, text);
+}
+
+// This session's daily checkpoint, written by the CLI so the agent never edits the shared daily file.
+function cmdCheckpoint(env) {
+  const daily = require('./lib/daily');
+  const { sid } = sessionOf(env.flags);
+  if (!sid) throw new CliError(2, 'checkpoint needs --session <id>');
+  const { ctx } = workspaceCtx(env);
+  const s = state.load(ctx.vault, sid);
+  const startedAt = s && s.startedAt ? s.startedAt : new Date();
+  const fields = { status: str(env.flags.status), next: str(env.flags.next), open: str(env.flags.open), log: str(env.flags.log) };
+  if (!Object.values(fields).some(Boolean)) throw new CliError(2, 'usage: brain checkpoint [--status …] [--next …] [--open …] [--log …]');
+  const r = daily.checkpoint(ctx.vault, ctx.lang, sid, startedAt, fields);
+  state.markCliWrite(ctx.vault, sid);
+  return out(env, r, 'checkpoint saved');
+}
+
+// Mutating commands run under the vault lock (another session may be writing the same files).
+function locked(env, fn) {
+  let v = null;
+  try {
+    v = workspaceCtx(env).ctx.vault;
+  } catch {
+    return fn();
+  }
+  return require('./lib/lock').withLock(v, fn);
 }
 
 // Any note by name (task, issue, feature, hub, loose note), one section at a time.
@@ -499,10 +550,13 @@ const ERRORS = {
   'reserved-name': () => new CliError(2, 'reserved or empty project name'),
   'already-split': () => new CliError(2, 'project already split'),
   'not-split': () => new CliError(2, 'project is not split'),
+  'vault-overlap': (e) => new CliError(2, `vault overlaps workspace ${e.other}: each workspace needs its own folder`),
+  'vault-locked': () => new CliError(7, 'vault busy: another session is writing it, retry in a moment'),
+  'multiline-secret': () => new CliError(2, 'secret values must be one line: encode multi-line values (for example base64)'),
   'invalid-config': () => new CliError(2, `invalid config file: ${config.configPath()}`),
 };
 
-const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|context|show|search|project|postmortem|workspace|secret|index|commit|status|adopt> …';
+const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|checkpoint|context|show|search|project|postmortem|workspace|secret|index|commit|status|adopt> …';
 
 async function main(argv, io = {}) {
   const stdout = io.stdout || process.stdout;
@@ -519,7 +573,7 @@ async function main(argv, io = {}) {
       case 'task':
       case 'issue':
       case 'feature':
-        cmdItems(env, cmd, sub, rest);
+        locked(env, () => cmdItems(env, cmd, sub, rest));
         break;
       case 'init':
         cmdInit(env, args);
@@ -534,16 +588,16 @@ async function main(argv, io = {}) {
         cmdWorkspace(env, sub, rest);
         break;
       case 'secret':
-        cmdSecret(env, sub, rest);
+        locked(env, () => cmdSecret(env, sub, rest));
         break;
       case 'idea':
-        cmdIdea(env, sub, rest);
+        locked(env, () => cmdIdea(env, sub, rest));
         break;
       case 'project':
-        cmdProject(env, sub, rest);
+        locked(env, () => cmdProject(env, sub, rest));
         break;
       case 'postmortem':
-        cmdPostmortem(env, sub, rest);
+        locked(env, () => cmdPostmortem(env, sub, rest));
         break;
       case 'adopt':
         cmdAdopt(env, args);
@@ -558,10 +612,13 @@ async function main(argv, io = {}) {
         cmdSearch(env, args);
         break;
       case 'index':
-        cmdIndex(env);
+        locked(env, () => cmdIndex(env));
         break;
       case 'commit':
-        cmdCommit(env);
+        locked(env, () => cmdCommit(env));
+        break;
+      case 'checkpoint':
+        cmdCheckpoint(env);
         break;
       case 'status':
       case undefined:
@@ -572,7 +629,7 @@ async function main(argv, io = {}) {
     }
     return 0;
   } catch (e) {
-    const err = e instanceof CliError ? e : ERRORS[e.message] ? ERRORS[e.message](e) : null;
+    const err = e instanceof CliError ? e : ERRORS[e.message] ? ERRORS[e.message](e) : /^scan-failed/.test(e.message) ? new CliError(5, `${e.message} — cannot scan for secrets, nothing committed`) : null;
     if (!err) {
       stderr.write(`error: ${e.message}\n`);
       return 1;

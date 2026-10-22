@@ -11,8 +11,11 @@ const PATTERNS = [
   ['aws-key', /\bAKIA[0-9A-Z]{16}\b/],
   ['github-token', /\b(gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})\b/],
   ['api-key', /\bsk-[A-Za-z0-9_-]{16,}/],
+  ['stripe-key', /\b[sr]k_(live|test)_[A-Za-z0-9]{16,}/],
+  ['google-key', /\bAIza[0-9A-Za-z_-]{35,}/],
+  ['jwt', /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/],
   ['slack-token', /\bxox[abprs]-[A-Za-z0-9-]{10,}/],
-  ['assignment', /(password|passwd|secret|api[_-]?key|token)\s*[:=]\s*\S{6,}/i],
+  ['assignment', /(password|passwd|pwd|secret|api[_-]?key|token|client[_-]?secret|[a-z]+_key)\s*[:=]\s*\S{6,}/i],
 ];
 
 function scan(text) {
@@ -26,7 +29,8 @@ function scan(text) {
 }
 
 function changedFiles(repo, pathspec) {
-  const out = git.run(repo, ['status', '--porcelain', '-z', '--untracked-files=all', '--', pathspec]);
+  // raw output: " M file" starts with a space that a trim would eat, shifting every path by one char
+  const out = git.runRaw(repo, ['status', '--porcelain', '-z', '--untracked-files=all', '--', git.literal(pathspec)]);
   const parts = out.split('\0').filter(Boolean);
   const files = [];
   for (let i = 0; i < parts.length; i++) {
@@ -48,8 +52,10 @@ function scanChanged(repo, pathspec) {
     try {
       if (!fs.statSync(full).isFile()) continue;
       text = fs.readFileSync(full, 'utf8');
-    } catch {
-      continue;
+    } catch (e) {
+      if (e.code === 'ENOENT') continue;
+      // fail closed: a file we cannot read is never committed unscanned
+      throw new Error(`scan-failed: ${file}`);
     }
     if (text.includes('\0')) continue;
     for (const h of scan(text)) hits.push({ file, ...h });
@@ -69,15 +75,30 @@ function readSecrets(vault) {
   return out;
 }
 
+// Edits the env block line by line: lines the user wrote (comments, continuation lines) stay untouched.
 function setSecret(vault, key, value) {
   if (!KEY.test(key)) throw new Error('invalid-secret-key');
+  if (/[\r\n]/.test(String(value))) throw new Error('multiline-secret');
   const file = path.join(vault, FILE);
-  const all = { ...readSecrets(vault), [key]: String(value) };
-  const block = '```env\n' + Object.entries(all).map(([k, v]) => `${k}=${v}`).join('\n') + '\n```';
   const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '# Secrets\n\nLocal only, never committed. Notes reference these values as `{{secret:KEY}}`.\n\n```env\n```\n';
-  const BLOCK = /```env\r?\n[\s\S]*?```/;
-  // function replacement: secret values may contain "$&" and similar patterns
-  fs.writeFileSync(file, BLOCK.test(text) ? text.replace(BLOCK, () => block) : `${text.replace(/\n*$/, '\n\n')}${block}\n`);
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text.split(/\r?\n/);
+  let open = lines.findIndex((l) => /^```env\s*$/.test(l));
+  if (open < 0) {
+    while (lines.length && lines[lines.length - 1] === '') lines.pop();
+    lines.push('', '```env', '```', '');
+    open = lines.length - 3;
+  }
+  let close = lines.findIndex((l, i) => i > open && /^```\s*$/.test(l));
+  if (close < 0) {
+    lines.push('```');
+    close = lines.length - 1;
+  }
+  const entry = `${key}=${value}`;
+  const at = lines.findIndex((l, i) => i > open && i < close && l.startsWith(`${key}=`));
+  if (at >= 0) lines[at] = entry;
+  else lines.splice(close, 0, entry);
+  fs.writeFileSync(file, lines.join(eol));
 }
 
 const placeholder = (key) => `{{secret:${key}}}`;

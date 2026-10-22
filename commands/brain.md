@@ -1,5 +1,5 @@
 ---
-description: Second brain — activate it for this folder or chat, manage tasks, issues and ideas, search and commit the vault.
+description: Second brain — activate it for a folder or chat (/brain init); in activated workspaces manage tasks, issues and ideas, search and commit the vault.
 argument-hint: "[init [--quick] | attach <ws> | detach | task … | issue … | idea … | context | search <text> | project … | distill | postmortem <title> | index | commit -m <msg> | status]"
 ---
 

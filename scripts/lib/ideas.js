@@ -41,7 +41,8 @@ function parseLine(raw) {
   rest = rest.replace(ID, '').replace(CREATED, '').replace(CLOSED, '').replace(LINK, '').trim();
   const struck = /^~~(.*)~~$/.exec(rest);
   const state = m[1] === ' ' ? 'open' : m[1] === '-' ? 'discarded' : 'promoted';
-  return { state, text: struck ? struck[1] : rest, id, created, closed: closedM ? closedM[2] : null, link };
+  // only a discarded idea owns its ~~strike~~; anything else keeps the text as written
+  return { state, text: struck && state === 'discarded' ? struck[1] : rest, id, created, closed: closedM ? closedM[2] : null, link };
 }
 
 function formatLine(i) {
@@ -129,25 +130,20 @@ function addIdea(ctx, text, { project, now = new Date() } = {}) {
   return { id, file };
 }
 
+// A line written by hand has no 🆔 yet: until something changes it, its id is derived from heading + text,
+// so listing stays a pure read and the id is stable.
+const derivedId = (heading, text) => crypto.createHash('sha1').update(`${heading || ''}\n${text}`).digest('hex').slice(0, 6);
+
 function listIdeas(ctx, { project, open, limit = 20 } = {}) {
-  const ids = knownIds(ctx);
   const general = T(ctx).general;
   const want = project ? projectName(project) : null;
   const out = [];
   for (const file of allFiles(ctx)) {
-    const lines = readLines(file);
-    let changed = false;
-    for (const e of scan(lines)) {
+    for (const e of scan(readLines(file))) {
       const i = parseLine(e.raw);
-      if (!i.id) {
-        i.id = newId(ids);
-        lines[e.index] = formatLine(i);
-        changed = true;
-      }
       const proj = !e.heading || e.heading === general ? null : e.heading;
-      out.push({ id: i.id, project: proj, text: i.text, state: i.state, file, line: e.index + 1 });
+      out.push({ id: i.id || derivedId(e.heading, i.text), project: proj, text: i.text, state: i.state, file, line: e.index + 1 });
     }
-    if (changed) writeLines(file, lines);
   }
   return out
     .filter((i) => !want || (i.project && i.project.toLowerCase() === want.toLowerCase()))
@@ -156,12 +152,12 @@ function listIdeas(ctx, { project, open, limit = 20 } = {}) {
 }
 
 function updateIdea(ctx, id, fn) {
-  listIdeas(ctx, { limit: 0 });
   for (const file of allFiles(ctx)) {
     const lines = readLines(file);
     for (const e of scan(lines)) {
       const i = parseLine(e.raw);
-      if (i.id !== id) continue;
+      if ((i.id || derivedId(e.heading, i.text)) !== id) continue;
+      i.id = id;
       fn(i);
       lines[e.index] = formatLine(i);
       writeLines(file, lines);
@@ -182,8 +178,7 @@ function discardIdea(ctx, id, now = new Date()) {
 function archiveIdeas(ctx, now = new Date(), days = 14) {
   const cutoff = now.getTime() - days * 86400000;
   const archFile = path.join(ctx.vault, '90_Archive', 'Ideas Archive.md');
-  let arch = null;
-  let moved = 0;
+  const pending = [];
   for (const file of allFiles(ctx)) {
     const lines = readLines(file);
     const take = scan(lines).filter((e) => {
@@ -191,14 +186,25 @@ function archiveIdeas(ctx, now = new Date(), days = 14) {
       const closed = i.state !== 'open' && parseYmd(i.closed);
       return closed && closed.getTime() < cutoff;
     });
-    if (!take.length) continue;
-    arch = arch || readLines(archFile, `${T(ctx).title} Archive`);
-    for (const e of take) insertUnder(arch, e.heading || T(ctx).general, [e.raw]);
+    if (take.length) pending.push({ file, lines, take });
+  }
+  if (!pending.length) return 0;
+  // the archive is written first: if that fails, nothing has left the inbox yet (and a retry never duplicates)
+  const arch = readLines(archFile, `${T(ctx).title} Archive`);
+  const have = arch.join('\n');
+  for (const { take } of pending) {
+    for (const e of take) {
+      const id = parseLine(e.raw).id;
+      if (!(id && have.includes(`🆔 ${id}`)) && !arch.includes(e.raw)) insertUnder(arch, e.heading || T(ctx).general, [e.raw]);
+    }
+  }
+  writeLines(archFile, arch);
+  let moved = 0;
+  for (const { file, lines, take } of pending) {
     for (const e of take.slice().reverse()) lines.splice(e.index, 1);
     writeLines(file, lines);
     moved += take.length;
   }
-  if (arch) writeLines(archFile, arch);
   return moved;
 }
 

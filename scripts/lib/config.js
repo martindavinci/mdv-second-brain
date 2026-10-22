@@ -68,9 +68,24 @@ function loadConfig(file = configPath()) {
   return expandPaths(deepMerge(defaults(), data));
 }
 
+// Only what differs from the defaults: a later version's new defaults still reach this config.
+function diffDefaults(value, def) {
+  if (isPlainObject(value) && isPlainObject(def)) {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      const d = k in def ? diffDefaults(v, def[k]) : v;
+      if (d !== undefined) out[k] = d;
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+  return JSON.stringify(value) === JSON.stringify(def) ? undefined : value;
+}
+
 function saveConfig(cfg, file = configPath()) {
+  const own = diffDefaults(cfg, defaults()) || {};
+  const out = { version: cfg.version || 1, ...own };
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + '\n');
+  fs.writeFileSync(file, JSON.stringify(out, null, 2) + '\n');
 }
 
 function vaultPathFor(cfg, name) {

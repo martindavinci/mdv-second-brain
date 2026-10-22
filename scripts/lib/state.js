@@ -94,7 +94,8 @@ function writeIndex(stateDir, sid, idx) {
 function bindSession(stateDir, sid, ws, { attached = false, contextSent = false } = {}) {
   const old = readIndex(stateDir, sid) || {};
   const workspaces = [...new Set([ws, ...(old.workspaces || [])])];
-  return writeIndex(stateDir, sid, { origin: ws, workspaces, attached, detached: false, contextSent });
+  // current = workspace whose instructions the model saw last (transitions are announced against it)
+  return writeIndex(stateDir, sid, { origin: ws, current: ws, workspaces, attached, detached: false, inactive: false, contextSent });
 }
 
 function detachSession(stateDir, sid) {
@@ -133,21 +134,54 @@ function activeWorkspace(cfg, sid, cwd, { atStart = false, now = new Date(), sta
   const { vaultPathFor } = require('./config');
   const pick = (name) => (name && cfg.workspaces[name] ? { name, vault: vaultPathFor(cfg, name), index: readIndex(stateDir, sid) } : null);
   const idx = readIndex(stateDir, sid);
-  if (idx) return idx.detached ? null : pick(idx.origin);
+  if (idx && idx.detached) return null;
+  // an explicit "only this chat" binding holds wherever the chat is
+  if (idx && idx.attached) return pick(idx.origin);
   const pendingWs = fs.existsSync(path.join(stateDir, 'pending')) ? consumePending(stateDir, cwd, now) : null;
   if (pendingWs && cfg.workspaces[pendingWs]) {
     bindSession(stateDir, sid, pendingWs, { attached: true, contextSent: false });
     return pick(pendingWs);
   }
-  if (!atStart) return null;
-  const { resolveWorkspace } = require('./resolve');
-  const r = resolveWorkspace(cfg, cwd);
-  if (r.status !== 'mapped') return null;
-  bindSession(stateDir, sid, r.name, { attached: false, contextSent: true });
-  return pick(r.name);
+  if (atStart) {
+    // start / resume / compact: the folder decides again (a session resumed elsewhere goes inert)
+    const { resolveWorkspace } = require('./resolve');
+    const r = resolveWorkspace(cfg, cwd);
+    if (r.status === 'mapped') {
+      bindSession(stateDir, sid, r.name, { attached: false, contextSent: true });
+      return pick(r.name);
+    }
+    if (idx && !idx.inactive) writeIndex(stateDir, sid, { ...idx, inactive: true });
+    return null;
+  }
+  return idx && !idx.inactive ? pick(idx.origin) : null;
+}
+
+// Session files untouched for `days` (finished sessions) are removed: they are plugin state, not notes.
+function prune(vault, stateDir, now = new Date(), days = 30) {
+  const cutoff = ms(now) - days * 86400000;
+  let removed = 0;
+  for (const dir of [stateDirOf(vault), path.join(stateDir, 'sessions'), path.join(stateDir, 'pending')]) {
+    let files = [];
+    try {
+      files = fs.readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const f of files) {
+      const full = path.join(dir, f);
+      try {
+        if (fs.statSync(full).isFile() && fs.statSync(full).mtimeMs < cutoff) {
+          fs.rmSync(full, { force: true });
+          removed++;
+        }
+      } catch {}
+    }
+  }
+  return removed;
 }
 
 module.exports = {
+  prune,
   PENDING_TTL_MS, stateDirOf, markCliWrite, cliLastWrite, load, save, fresh, update, markDirty, markFlushed, shouldBlock,
   readIndex, writeIndex, bindSession, detachSession, addWorkspace, writePending, consumePending, activeWorkspace,
 };

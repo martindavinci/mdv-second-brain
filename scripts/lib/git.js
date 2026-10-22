@@ -3,8 +3,21 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
+// Exact output: porcelain status lines start with a meaningful space, so never trim those.
+function runRaw(cwd, args) {
+  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+}
+
 function run(cwd, args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }).trim();
+  return runRaw(cwd, args).trim();
+}
+
+// Pathspec matched as a plain path ("team[1]" never globs to "team1").
+const literal = (pathspec) => (pathspec === '.' ? '.' : `:(literal)${pathspec}`);
+
+// `-c` options that set the commit identity for one command only.
+function identityArgs(identity) {
+  return identity && identity.name && identity.email ? ['-c', `user.name=${identity.name}`, '-c', `user.email=${identity.email}`] : [];
 }
 
 // Not cached: PATH can change between calls (tests, odd shells).
@@ -57,22 +70,28 @@ function excludeInParent(parentTop, dir) {
 // Never staged, whatever the vault's .gitignore says.
 const NEVER = [':(exclude,glob)**/*.local.md', ':(exclude,glob)**/.brain/**'];
 
-function commitPath(repo, pathspec, message) {
+function commitPath(repo, pathspec, message, { identity } = {}) {
   if (!available()) return { committed: false, reason: 'git-unavailable' };
-  const spec = ['--', pathspec, ...NEVER];
-  run(repo, ['add', '-A', ...spec]);
+  const spec = ['--', literal(pathspec), ...NEVER];
+  try {
+    run(repo, ['add', '-A', ...spec]);
+  } catch (e) {
+    // nothing on disk or in the index under that literal path
+    if (/did not match any files/.test(String(e.stderr || ''))) return { committed: false, reason: 'no-changes' };
+    throw e;
+  }
   try {
     run(repo, ['diff', '--cached', '--quiet', ...spec]);
     return { committed: false, reason: 'no-changes' };
   } catch {
-    run(repo, ['commit', '-q', '-m', message, ...spec]);
+    run(repo, [...identityArgs(identity), 'commit', '-q', '-m', message, ...spec]);
     return { committed: true };
   }
 }
 
 // Private files git already tracks under pathspec (they must be untracked before any commit).
 function trackedPrivate(repo, pathspec) {
-  const out = run(repo, ['ls-files', '--', pathspec]);
+  const out = run(repo, ['ls-files', '--', literal(pathspec)]);
   return out.split('\n').filter((f) => f && (f.endsWith('.local.md') || /(^|\/)\.brain\//.test(f)));
 }
 
@@ -140,9 +159,19 @@ function detectIdentity(dir, { vaultDir, home = require('node:os').homedir() } =
   } catch {}
   const ids = children.map((e) => localIdentity(path.join(start, e.name))).filter(Boolean);
   if (ids.length && ids.length === children.length && ids.every((i) => i.email === ids[0].email && i.name === ids[0].name)) return { ...ids[0], source: 'children' };
+  // the author of the most recent commit, in the repo itself or in the newest child repo
+  const repos = [toplevel(start), ...children.map((e) => path.join(start, e.name))].filter(Boolean);
+  let last = null;
+  for (const r of repos) {
+    const out = tryRun(r, ['log', '-1', '--format=%ct%x09%an%x09%ae']);
+    if (!out) continue;
+    const [ts, name, email] = out.split('\t');
+    if (name && email && (!last || Number(ts) > last.ts)) last = { ts: Number(ts), name, email };
+  }
+  if (last) return { name: last.name, email: last.email, source: 'log' };
   const name = tryRun(start, ['config', '--global', '--get', 'user.name']);
   const email = tryRun(start, ['config', '--global', '--get', 'user.email']);
   return name && email ? { name, email, source: 'global' } : null;
 }
 
-module.exports = { run, available, toplevel, init, excludeInParent, commitPath, trackedPrivate, moveFile, detectIdentity, localIdentity };
+module.exports = { run, runRaw, available, toplevel, init, excludeInParent, commitPath, trackedPrivate, moveFile, detectIdentity, localIdentity, identityArgs, literal };

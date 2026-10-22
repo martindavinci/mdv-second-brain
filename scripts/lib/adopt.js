@@ -16,6 +16,7 @@ const SECTION_STATUS = [
   [/^(discarded|dropped|cancelled)\b/i, 'discarded'],
 ];
 const KIND_DIR = { feature: 'Features', task: 'Tasks', issue: 'Issues' };
+const TASK_STATUSES = new Set(['todo', 'to do', 'to-do', 'in progress', 'in-progress', 'doing', 'wip', 'blocked', 'done', 'completed', 'discarded', 'open', 'closed']);
 
 const posix = (p) => p.split(path.sep).join('/');
 const readFm = (file) => {
@@ -38,7 +39,9 @@ function classify(data) {
   const tags = [].concat(data.tags || []).map((t) => String(t).toLowerCase());
   if (['feature', 'system', 'spec'].includes(type)) return 'feature';
   if (['issue', 'bug'].includes(type) || tags.includes('bug') || tags.includes('issue')) return 'issue';
-  if (type === 'task' || (data.status && String(data.status).trim())) return 'task';
+  if (type === 'task') return 'task';
+  // only work statuses make a task: PKM ones (evergreen, seedling…) and typed notes stay notes
+  if (!type && TASK_STATUSES.has(String(data.status || '').trim().toLowerCase())) return 'task';
   return null;
 }
 
@@ -184,6 +187,16 @@ function applyAdopt(cfg, src, ws, plan, cfgFile, { language } = {}) {
   cfg.workspaces[ws] = { ...existing, paths: existing.paths || [], vault: src };
   if (plan.board) cfg.workspaces[ws].board = plan.board;
   if (!vault.languageFor(cfg, ws) && !language) throw new Error('language-required');
+  // a moved folder moves its notes too: their path links are rewritten like any other
+  const linkMoves = [...plan.moves];
+  for (const m of plan.moves) {
+    const from = path.join(src, m.from);
+    if (!fs.existsSync(from) || !fs.statSync(from).isDirectory()) continue;
+    for (const f of markdownFiles(from)) {
+      const rel = posix(path.relative(from, f));
+      linkMoves.push({ from: `${m.from}/${rel}`, to: `${m.to}/${rel}` });
+    }
+  }
   let moved = 0;
   for (const m of plan.moves) {
     const from = path.join(src, m.from);
@@ -192,9 +205,9 @@ function applyAdopt(cfg, src, ws, plan, cfgFile, { language } = {}) {
     git.moveFile(from, to);
     moved++;
   }
-  rewriteLinks(src, plan.moves);
+  rewriteLinks(src, linkMoves);
   config.saveConfig(cfg, cfgFile);
-  vault.ensureVault(cfg, ws, { language, cfgFile });
+  vault.ensureVault(cfg, ws, { language, cfgFile, repair: true });
   const ctx = { vault: src, boardFile: path.join(src, config.boardPathFor(cfg, ws)), lang: vault.languageFor(cfg, ws) || language };
   let tasksCreated = 0;
   if (plan.tasksFile && fs.existsSync(path.join(src, plan.tasksFile))) {

@@ -24,7 +24,7 @@ Outside a workspace the plugin is inert: do nothing unless the user asks to acti
 Finish with the single line the CLI prints. The workspace context arrives with the next message.
 
 ## While you work (level 1, no commit)
-- Your daily section (marker in the context): keep `Status / Next / Open` current (≤ 600 chars, overwrite) and append short log lines. Do it on your own at each meaningful step, so the Stop reminder stays rare.
+- Your daily section: update it only with `brain checkpoint --status "<where we are>" --next "<next step>" --open "<open points>" --log "<what just happened>"` (any subset; ≤ 600 chars in all). Never edit the daily file by hand: other sessions write to it too. Do it on your own at each meaningful step, so the Stop reminder stays rare.
 - Active task or issue: keep `## Status` (≤ 600 chars, rewrite), TODO checkboxes and `## Log` (append) current.
 - Changelog-worthy work (new feature, behaviour change, relevant refactor) → always `brain task add "<Name>" [--feature "<Feature>"]` without asking, then `brain task move "<Name>" in-progress`, and `brain task done "<Name>"` at the end.
 - Actionable bug or problem → always `brain issue add "<Name>"`. One ordinary bug = one issue, no duplicate task. Unconfirmed observations stay in the daily log.
@@ -61,4 +61,4 @@ Orient with `brain context`, then `brain show "<Name>" --section <heading> --max
 - Never touch Claude Code memory files. Never push.
 
 ## Commands
-`task|issue add|list|show|move|block|unblock|done|discard|delete`, `task sync`, `feature add`, `idea add|list|promote|discard`, `context`, `search`, `project add|list|split|merge`, `postmortem add`, `index`, `commit -m`, `status`, `secret set|get|list`, `workspace add|list|map|ignore`, `init`, `attach`, `detach`, `adopt <path> --as <ws>` (dry run; `--apply` only after the user confirms the plan).
+`checkpoint`, `show`, `task|issue add|list|show|move|block|unblock|done|discard|delete`, `task sync`, `feature add`, `idea add|list|promote|discard`, `context`, `search`, `project add|list|split|merge`, `postmortem add`, `index`, `commit -m`, `status`, `secret set|get|list`, `workspace add|list|map|ignore`, `init`, `attach`, `detach`, `adopt <path> --as <ws>` (dry run; `--apply` only after the user confirms the plan).

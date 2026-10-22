@@ -44,7 +44,8 @@ function ensureGitignore(file) {
   if (missing.length) fs.writeFileSync(file, text + (text && !text.endsWith('\n') ? '\n' : '') + missing.join('\n') + '\n');
 }
 
-function ensureVault(cfg, name, { language, cfgFile } = {}) {
+// repair: also redo the structural part (folders, .gitignore lines, board, git) of a vault already born.
+function ensureVault(cfg, name, { language, cfgFile, repair = false } = {}) {
   let lang = languageFor(cfg, name);
   if (!lang) {
     if (!language) throw new Error('language-required');
@@ -53,14 +54,49 @@ function ensureVault(cfg, name, { language, cfgFile } = {}) {
     saveConfig(cfg, cfgFile);
   }
   const vault = vaultPathFor(cfg, name);
-  const created = !fs.existsSync(path.join(vault, 'Home.md'));
+  const marker = path.join(vault, '.brain', 'initialized');
+  // after birth the vault belongs to the user: hooks only check the marker (one stat), nothing is re-created
+  if (fs.existsSync(marker) && !repair) return { vault, created: false };
+  const born = fs.existsSync(marker);
+  const created = !born && !fs.existsSync(path.join(vault, 'Home.md'));
   for (const d of DIRS) fs.mkdirSync(path.join(vault, d), { recursive: true });
   ensureGitignore(path.join(vault, '.gitignore'));
   writeIfMissing(path.join(vault, '.gitattributes'), GITATTRIBUTES);
-  for (const f of ROOT_FILES) writeIfMissing(path.join(vault, f), templates.fill(templates.load(lang, f), { workspace: name }));
+  if (!born) for (const f of ROOT_FILES) writeIfMissing(path.join(vault, f), templates.fill(templates.load(lang, f), { workspace: name }));
   writeIfMissing(path.join(vault, boardPathFor(cfg, name)), emptyBoard());
   setupGit(cfg, name, vault);
+  fs.writeFileSync(marker, new Date().toISOString() + '\n');
   return { vault, created };
+}
+
+// Real path, following junctions/symlinks of the part that exists.
+function realish(p) {
+  let head = path.resolve(p);
+  const tail = [];
+  while (!fs.existsSync(head)) {
+    const up = path.dirname(head);
+    if (up === head) break;
+    tail.unshift(path.basename(head));
+    head = up;
+  }
+  try {
+    head = fs.realpathSync.native(head);
+  } catch {}
+  return path.join(head, ...tail);
+}
+
+// Two workspaces never share a vault, and no vault lives inside another one.
+function assertNoOverlap(cfg, name, vaultDir) {
+  const mine = realish(vaultDir);
+  for (const other of Object.keys(cfg.workspaces || {})) {
+    if (other === name) continue;
+    const theirs = realish(vaultPathFor(cfg, other));
+    if (isInside(mine, theirs) || isInside(theirs, mine)) {
+      const e = new Error('vault-overlap');
+      e.other = other;
+      throw e;
+    }
+  }
 }
 
 function gitModeFor(cfg, name) {
@@ -72,9 +108,9 @@ function gitModeFor(cfg, name) {
 const samePath = (a, b) => a && b && normalize(a) === normalize(b);
 
 function setupGit(cfg, name, vaultDir) {
-  if (!git.available()) return;
   const mode = gitModeFor(cfg, name);
   if (mode === 'none' || mode === 'host') return;
+  if (!git.available()) return;
   const repo = mode === 'single' ? cfg.root : vaultDir;
   const top = git.toplevel(repo);
   if (!samePath(top, repo)) {
@@ -84,13 +120,11 @@ function setupGit(cfg, name, vaultDir) {
   applyGitConfig(cfg, name, repo);
 }
 
-const IDENTITY_KEYS = new Set(['user.name', 'user.email', 'include.path']);
-
 function applyGitConfig(cfg, name, repo) {
   const changed = [];
   const conf = (wsOf(cfg, name).git && wsOf(cfg, name).git.config) || {};
-  // a host repo that already resolves its own identity is the user's: never rewrite it
-  const hostOwned = gitModeFor(cfg, name) === 'host' && git.localIdentity(repo);
+  // only the vault's own repo is configured; shared repos (single, host) get the identity per commit
+  if (gitModeFor(cfg, name) !== 'per-workspace') return changed;
   const get = (args) => {
     try {
       return git.run(repo, args);
@@ -100,7 +134,6 @@ function applyGitConfig(cfg, name, repo) {
   };
   for (const [key, raw] of Object.entries(conf)) {
     const value = String(raw);
-    if (hostOwned && IDENTITY_KEYS.has(key)) continue;
     if (key === 'include.path') {
       const all = (get(['config', '--local', '--get-all', 'include.path']) || '').split('\n').filter(Boolean);
       if (!all.includes(value)) {
@@ -130,4 +163,4 @@ function repoFor(cfg, name, vaultDir) {
   return { repo: vaultDir, pathspec: '.' };
 }
 
-module.exports = { GITIGNORE, GITATTRIBUTES, DIRS, ROOT_FILES, languageFor, ensureVault, gitModeFor, setupGit, applyGitConfig, repoFor };
+module.exports = { GITIGNORE, GITATTRIBUTES, DIRS, ROOT_FILES, languageFor, ensureVault, gitModeFor, setupGit, applyGitConfig, repoFor, assertNoOverlap };

@@ -59,9 +59,12 @@ test('idea ids are stable across edits and list respects limit', () => {
   write(f, '# Ideas\n\nmy own intro text\n\n## alpha\n\n- [ ] hand written idea\n- [ ] another one\n- [ ] third\n');
   const first = ideas.listIdeas(ctx, { limit: 2 });
   assert.equal(first.length, 2);
-  assert.match(read(f), /hand written idea 🆔 [a-z0-9]{6}/);
+  assert.doesNotMatch(read(f), /🆔/);
+  assert.deepEqual(ideas.listIdeas(ctx, { limit: 2 }).map((i) => i.id), first.map((i) => i.id));
+  ideas.discardIdea(ctx, first[1].id);
+  assert.match(read(f), new RegExp(`~~another one~~ 🆔 ${first[1].id}`));
   assert.match(read(f), /my own intro text/);
-  write(f, read(f).replace('another one', 'another one, reworded'));
+  write(f, read(f).replace('~~another one~~', '~~another one, reworded~~'));
   const again = ideas.listIdeas(ctx, {});
   assert.equal(again[0].id, first[0].id);
   assert.equal(again[1].id, first[1].id);

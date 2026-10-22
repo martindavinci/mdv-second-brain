@@ -107,7 +107,8 @@ The board has four lanes — ToDo, In Progress, Completed, Discarded — and the
 | `brain project list` · `split <p>` · `merge <p>` | give a project its own board and indexes, or fold it back |
 | `brain secret set` · `get` · `list` | values in `secrets.local.md`, referenced as `{{secret:KEY}}` |
 | `brain workspace add` · `list` · `map` · `ignore` | edit the config |
-| `brain index` · `brain commit -m "<msg>"` · `brain status` | archive, rebuild indexes, commit the vault |
+| `brain checkpoint --status … --next … --open … --log …` | update this session's section of the daily (safe with parallel sessions) |
+| `brain index` · `brain commit -m "<msg>"` · `brain status` | archive, rebuild indexes, prune old session state, commit the vault |
 | `brain adopt <path> --as <ws> [--apply] [--language]` | adopt an existing vault in place: dry run first, files moved (never copied or deleted), path links rewritten, a `TASKS.md` checklist turned into cards |
 
 ## Privacy

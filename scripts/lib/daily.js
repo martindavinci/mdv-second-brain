@@ -4,6 +4,7 @@ const path = require('node:path');
 const templates = require('./templates');
 const markers = require('./markers');
 const git = require('./git');
+const lock = require('./lock');
 const { ymd, parseYmd } = require('./names');
 
 const dailyDir = (vault) => path.join(vault, '00_Inbox', 'Daily');
@@ -19,14 +20,41 @@ function ensureSessionSection(vault, lang, sid, startedAt) {
   const start = new Date(startedAt);
   const file = dailyPath(vault, start);
   const marker = `session:${sid8(sid)}`;
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  let text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : templates.fill(templates.load(lang, 'daily.md'), { date: ymd(start) });
-  if (markers.hasSection(text, marker)) return { file, marker };
-  const [heading, ...rest] = templates.fill(templates.load(lang, 'session.md'), { time: hhmm(start) }).replace(/\n+$/, '').split('\n');
-  if (!text.endsWith('\n')) text += '\n';
-  text += `\n${heading}\n${markers.open(marker)}\n${rest.join('\n')}\n${markers.close(marker)}\n`;
-  fs.writeFileSync(file, text);
-  return { file, marker };
+  // read-modify-write under the vault lock: parallel sessions append to the same daily
+  return lock.withLock(vault, () => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    let text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : templates.fill(templates.load(lang, 'daily.md'), { date: ymd(start) });
+    if (markers.hasSection(text, marker)) return { file, marker };
+    const [heading, ...rest] = templates.fill(templates.load(lang, 'session.md'), { time: hhmm(start) }).replace(/\n+$/, '').split('\n');
+    if (!text.endsWith('\n')) text += '\n';
+    text += `\n${heading}\n${markers.open(marker)}\n${rest.join('\n')}\n${markers.close(marker)}\n`;
+    fs.writeFileSync(file, text);
+    return { file, marker };
+  });
+}
+
+// Updates this session's checkpoint (Status / Next / Open overwritten, one log line appended) without touching other sessions.
+function checkpoint(vault, lang, sid, startedAt, { status, next, open, log }, now = new Date()) {
+  return lock.withLock(vault, () => {
+    const { file, marker } = ensureSessionSection(vault, lang, sid, startedAt);
+    const text = fs.readFileSync(file, 'utf8');
+    const lines = (markers.getSection(text, marker) || '').split('\n');
+    const set = (re, value) => {
+      if (value === undefined || value === true) return;
+      const i = lines.findIndex((l) => re.test(l));
+      const label = i >= 0 ? re.exec(lines[i])[1] : null;
+      if (i >= 0) lines[i] = `- ${label}: ${String(value).replace(/\s+/g, ' ').trim()}`;
+    };
+    set(/^- (Status|Stato):/i, status);
+    set(/^- (Next):/i, next);
+    set(/^- (Open|Aperto):/i, open);
+    if (typeof log === 'string' && log.trim()) {
+      while (lines.length && lines[lines.length - 1] === '') lines.pop();
+      lines.push(`- ${hhmm(now)} ${log.replace(/\s+/g, ' ').trim()}`);
+    }
+    fs.writeFileSync(file, markers.setSection(text, marker, lines.join('\n')));
+    return { file, marker };
+  });
 }
 
 function sessionsIn(text) {
@@ -77,4 +105,4 @@ function rollover(vault, now = new Date(), days = 7) {
   return moved;
 }
 
-module.exports = { dailyPath, ensureSessionSection, lastSessionState, rollover, sessionsIn, sid8 };
+module.exports = { dailyPath, ensureSessionSection, checkpoint, lastSessionState, rollover, sessionsIn, sid8 };

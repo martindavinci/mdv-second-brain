@@ -49,9 +49,11 @@ test('ensureVault never overwrites user files', () => {
   fs.writeFileSync(join(r.vault, '00_Inbox', 'Plan.md'), 'my board');
   fs.unlinkSync(join(r.vault, 'TOOLS.md'));
   vault.ensureVault(cfg, 'w', { cfgFile });
+  vault.ensureVault(cfg, 'w', { cfgFile, repair: true });
   assert.equal(read(join(r.vault, 'AGENTS.md')), 'mine');
   assert.equal(read(join(r.vault, '00_Inbox', 'Plan.md')), 'my board');
-  assert.ok(fs.existsSync(join(r.vault, 'TOOLS.md')));
+  // after birth the rule files are the user's: a deleted one stays deleted
+  assert.ok(!fs.existsSync(join(r.vault, 'TOOLS.md')));
 });
 
 test('per-workspace vault inside a parent repo gets excluded there', { skip: !hasGit }, () => {

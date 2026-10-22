@@ -31,7 +31,14 @@ function projectFor(cfg, name, absPath) {
   if (r.status !== 'mapped' || r.name !== name || r.via !== 'path') return null;
   const rel = path.relative(r.mappedDir, path.resolve(absPath));
   if (!rel || rel.startsWith('..')) return null;
-  return rel.split(/[\\/]/)[0] || null;
+  const seg = rel.split(/[\\/]/)[0];
+  if (!seg) return null;
+  // the folder name as it is on disk (paths are case-insensitive on Windows, project names are not)
+  try {
+    const onDisk = fs.readdirSync(r.mappedDir).find((n) => n.toLowerCase() === seg.toLowerCase());
+    if (onDisk) return onDisk;
+  } catch {}
+  return seg;
 }
 
 function relatedCandidates(mappedDir, project) {

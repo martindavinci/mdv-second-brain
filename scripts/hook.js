@@ -134,12 +134,12 @@ function handle(event, input, env) {
     const sec = daily.ensureSessionSection(v, lang, sid, s.startedAt);
     s.dailyFile = sec.file;
     const out = [];
-    if (ws !== idx.origin) {
-      state.addWorkspace(stateDir, sid, ws);
-      if (!s.announced) {
-        out.push(switchContext({ ws, vault: v, dailyFile: sec.file, marker: sec.marker, cli: env.cli, sid }));
-        s.announced = true;
-      }
+    if (ws !== idx.origin) state.addWorkspace(stateDir, sid, ws);
+    // every change of workspace is announced, the way back to the origin too: the model must drop the
+    // previous workspace's CLI line before writing anything
+    if (ws !== (idx.current || idx.origin)) {
+      out.push(switchContext({ ws, vault: v, dailyFile: sec.file, marker: sec.marker, cli: env.cli, sid, back: ws === idx.origin }));
+      state.writeIndex(stateDir, sid, { ...state.readIndex(stateDir, sid), current: ws });
     }
     if (capturing(cfg, abs) && !(s.captured || []).includes(abs)) {
       const raw = r.status === 'mapped' ? projectFor(cfg, ws, abs) : null;
@@ -162,7 +162,7 @@ function handle(event, input, env) {
       state.save(v, sid, s);
       return JSON.stringify({
         decision: 'block',
-        reason: `[second-brain] Update your session section in ${s.dailyFile} and the TODO/log of the active note (workspace ${ws}) before finishing. Do not mention this to the user.`,
+        reason: `[second-brain] Update your session section in ${s.dailyFile} with the CLI \`checkpoint --status … --next … --log …\`, and the Status/TODO/Log of the active note (workspace ${ws}), before finishing. Do not mention this to the user.`,
       });
     }
     return '';
@@ -175,7 +175,7 @@ function run(event, input, opts = {}) {
   const configDir = path.dirname(cfgFile);
   try {
     if (!fs.existsSync(cfgFile)) return { stdout: '' };
-    if (!input || typeof input !== 'object') return { stdout: '' };
+    if (!input || typeof input !== 'object') throw new Error('bad-input: hook stdin is not a JSON object');
     const env = { now: opts.now || new Date(), cli: opts.cli || DEFAULT_CLI, cfgFile, stateDir: path.join(configDir, 'state') };
     return { stdout: handle(event, input, env) || '' };
   } catch (e) {

@@ -8,7 +8,7 @@
             "type": "command",
             "shell": "bash",
             "timeout": 10,
-            "command": "if command -v node >/dev/null 2>&1; then node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.js\" session-start; else echo 'second brain inactive: install Node >= 18'; fi"
+            "command": "command -v node >/dev/null 2>&1 && node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.js\" session-start || true"
           }
         ]
       }

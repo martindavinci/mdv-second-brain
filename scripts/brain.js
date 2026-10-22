@@ -209,7 +209,9 @@ function cmdInit(env, args) {
     return out(env, p, JSON.stringify(p, null, 2));
   }
   const r = resolveWorkspace(cfg, dir);
-  const name = args[0] || (r.status === 'mapped' ? r.name : defaultName(dir));
+  // without an explicit name a new folder gets a new workspace: never merge it into a same-named one
+  let name = args[0] || (r.status === 'mapped' ? r.name : defaultName(dir));
+  if (!args[0] && r.status !== 'mapped') for (let n = 2; cfg.workspaces[name]; n++) name = `${defaultName(dir)}-${n}`;
   config.assertWorkspaceName(name);
   let ws = cfg.workspaces[name];
   if (!ws) {
@@ -219,9 +221,13 @@ function cmdInit(env, args) {
     if (str(flags.vault)) ws.vault = path.resolve(env.cwd, str(flags.vault));
     const identity = str(flags.identity) || 'detected';
     if (mode !== 'none' && identity === 'detected') {
-      const id = git.detectIdentity(dir, { vaultDir: ws.vault || path.join(cfg.root, name) });
-      if (id && id.source === 'gitconfig-file') ws.git.config = { 'include.path': id.includePath };
-      else if (id && id.source !== 'global') ws.git.config = { 'user.name': id.name, 'user.email': id.email };
+      // the include path must be relative to the .git of the repo that will be committed
+      const vaultDir = ws.vault || path.join(cfg.root, name);
+      const repoDir = mode === 'single' ? cfg.root : mode === 'host' ? git.toplevel(vaultDir) : vaultDir;
+      const id = repoDir ? git.detectIdentity(dir, { vaultDir: repoDir }) : null;
+      const hostResolves = mode === 'host' && id && id.source === 'repo';
+      if (id && !hostResolves && id.source === 'gitconfig-file') ws.git.config = { 'include.path': id.includePath };
+      else if (id && !hostResolves && id.source !== 'global') ws.git.config = { 'user.name': id.name, 'user.email': id.email };
     }
     cfg.workspaces[name] = ws;
   } else if (!(ws.paths || []).some((p) => isInside(dir, p)) && !isInside(dir, config.vaultPathFor(cfg, name))) {
@@ -438,6 +444,8 @@ function cmdCommit(env) {
   const repo = vault.repoFor(env.cfg, name, ctx.vault);
   if (!repo) return out(env, { committed: false, reason: 'git-disabled' }, 'git disabled');
   if (!git.available()) return out(env, { committed: false, reason: 'git-unavailable' }, 'git unavailable');
+  const tracked = git.trackedPrivate(repo.repo, repo.pathspec);
+  if (tracked.length) throw new CliError(5, tracked.map((f) => `private file tracked by git: ${f} — run: git rm --cached "${f}"`).join('\n'));
   const hits = secrets.scanChanged(repo.repo, repo.pathspec);
   if (hits.length) throw new CliError(5, hits.map((h) => `secrets found: ${h.file}:${h.line} (${h.kind}) — move to secrets.local.md`).join('\n'));
   vault.applyGitConfig(env.cfg, name, repo.repo);
@@ -449,6 +457,14 @@ function cmdCommit(env) {
 function cmdContext(env) {
   const { name: ws, ctx } = workspaceCtx(env);
   const text = require('./lib/retrieve').context(ctx, cwdProject(env, ws));
+  return out(env, { text }, text);
+}
+
+// Any note by name (task, issue, feature, hub, loose note), one section at a time.
+function cmdShow(env, args) {
+  const { ctx } = workspaceCtx(env);
+  const max = Number(str(env.flags['max-chars']) || 4000);
+  const text = tasks.showItem(ctx, requireArg(args.join(' '), 'name'), { section: str(env.flags.section), maxChars: max > 0 ? max : 4000 });
   return out(env, { text }, text);
 }
 
@@ -486,7 +502,7 @@ const ERRORS = {
   'invalid-config': () => new CliError(2, `invalid config file: ${config.configPath()}`),
 };
 
-const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|context|search|project|postmortem|workspace|secret|index|commit|status|adopt> …';
+const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|context|show|search|project|postmortem|workspace|secret|index|commit|status|adopt> …';
 
 async function main(argv, io = {}) {
   const stdout = io.stdout || process.stdout;
@@ -534,6 +550,9 @@ async function main(argv, io = {}) {
         break;
       case 'context':
         cmdContext(env);
+        break;
+      case 'show':
+        cmdShow(env, args);
         break;
       case 'search':
         cmdSearch(env, args);

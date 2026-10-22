@@ -17,7 +17,8 @@ Outside a workspace the plugin is inert: do nothing unless the user asks to acti
   3. Vault: common root `<defaultVault>` (recommended) / inside the folder `<insideVault>` / a custom path.
   4. Git: own repo with the detected identity (show `identity.name <identity.email>`; recommended) / own repo with the global identity / no git / inside the repo that contains the vault.
   Never ask the language: use the code of the user's chat language.
-  Then run `brain init <ws> --path <dir> [--vault <dir>] --git-mode per-workspace|none|host [--identity detected|global] --language <code>`; for "only this chat" run `brain attach <ws>` (create the workspace first with `brain init` if it is new).
+  Then run `brain init <ws> --path <dir> [--vault <dir>] --git-mode per-workspace|none|host [--identity detected|global] --language <code>`.
+  For "only this chat" never map the folder: a new workspace is `brain workspace add <ws> --language <code> [--vault <dir>]`, then `brain attach <ws>`.
 - Quick ("attiva brain con i default", `/brain init --quick`): `brain init --quick --language <code>`, no questions.
 - Off for this chat ("disattiva brain"): `brain detach`.
 Finish with the single line the CLI prints. The workspace context arrives with the next message.
@@ -45,7 +46,7 @@ Triggers: task completed, bug fixed, decision taken, the user says a part is fin
 Cards never point to features: when `brain task sync` reports cards on features, turn each into a task.
 
 ## Reading (context budget)
-Orient with `brain context`, then `brain task show "<Name>" --section <heading> --max-chars 2000`, then `brain search "<text>" [--project <p>] [--type task|issue|feature|note]`; add `--archive` only when the user asks about old work. Never read Home.md, generated indexes, whole dailies or `90_Archive/` to orient. Files reported `oversize:` → distil them: rewrite current truth, group `MEMORY.md` lines into loose notes.
+Orient with `brain context`, then `brain show "<Name>" --section <heading> --max-chars 2000` (any note), then `brain search "<text>" [--project <p>] [--type task|issue|feature|note]`; add `--archive` only when the user asks about old work. Never read Home.md, generated indexes, whole dailies or `90_Archive/` to orient. Files reported `oversize:` → distil them: rewrite current truth, group `MEMORY.md` lines into loose notes.
 
 ## Rules
 - Read the vault's AGENTS.md, WORKFLOW.md and TOOLS.md once per context before your first write there; they override this skill.

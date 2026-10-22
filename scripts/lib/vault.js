@@ -35,6 +35,15 @@ function writeIfMissing(file, content) {
   return true;
 }
 
+// An existing .gitignore (adopted vault, custom folder) keeps its lines and gains the ones secrets rely on.
+function ensureGitignore(file) {
+  if (writeIfMissing(file, GITIGNORE)) return;
+  const text = fs.readFileSync(file, 'utf8');
+  const have = new Set(text.split(/\r?\n/).map((l) => l.trim()));
+  const missing = GITIGNORE.trim().split('\n').filter((l) => !have.has(l));
+  if (missing.length) fs.writeFileSync(file, text + (text && !text.endsWith('\n') ? '\n' : '') + missing.join('\n') + '\n');
+}
+
 function ensureVault(cfg, name, { language, cfgFile } = {}) {
   let lang = languageFor(cfg, name);
   if (!lang) {
@@ -46,7 +55,7 @@ function ensureVault(cfg, name, { language, cfgFile } = {}) {
   const vault = vaultPathFor(cfg, name);
   const created = !fs.existsSync(path.join(vault, 'Home.md'));
   for (const d of DIRS) fs.mkdirSync(path.join(vault, d), { recursive: true });
-  writeIfMissing(path.join(vault, '.gitignore'), GITIGNORE);
+  ensureGitignore(path.join(vault, '.gitignore'));
   writeIfMissing(path.join(vault, '.gitattributes'), GITATTRIBUTES);
   for (const f of ROOT_FILES) writeIfMissing(path.join(vault, f), templates.fill(templates.load(lang, f), { workspace: name }));
   writeIfMissing(path.join(vault, boardPathFor(cfg, name)), emptyBoard());
@@ -75,16 +84,34 @@ function setupGit(cfg, name, vaultDir) {
   applyGitConfig(cfg, name, repo);
 }
 
+const IDENTITY_KEYS = new Set(['user.name', 'user.email', 'include.path']);
+
 function applyGitConfig(cfg, name, repo) {
   const changed = [];
   const conf = (wsOf(cfg, name).git && wsOf(cfg, name).git.config) || {};
-  for (const [key, value] of Object.entries(conf)) {
-    let current = null;
+  // a host repo that already resolves its own identity is the user's: never rewrite it
+  const hostOwned = gitModeFor(cfg, name) === 'host' && git.localIdentity(repo);
+  const get = (args) => {
     try {
-      current = git.run(repo, ['config', '--local', '--get', key]);
-    } catch {}
-    if (current !== String(value)) {
-      git.run(repo, ['config', '--local', key, String(value)]);
+      return git.run(repo, args);
+    } catch {
+      return null;
+    }
+  };
+  for (const [key, raw] of Object.entries(conf)) {
+    const value = String(raw);
+    if (hostOwned && IDENTITY_KEYS.has(key)) continue;
+    if (key === 'include.path') {
+      const all = (get(['config', '--local', '--get-all', 'include.path']) || '').split('\n').filter(Boolean);
+      if (!all.includes(value)) {
+        git.run(repo, ['config', '--local', '--add', 'include.path', value]);
+        changed.push(key);
+      }
+      continue;
+    }
+    // effective value, includes followed
+    if (get(['config', '--get', key]) !== value) {
+      git.run(repo, ['config', '--local', key, value]);
       changed.push(key);
     }
   }

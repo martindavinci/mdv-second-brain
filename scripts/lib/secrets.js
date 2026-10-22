@@ -60,9 +60,9 @@ function scanChanged(repo, pathspec) {
 function readSecrets(vault) {
   const file = path.join(vault, FILE);
   if (!fs.existsSync(file)) return {};
-  const m = /```env\n([\s\S]*?)```/.exec(fs.readFileSync(file, 'utf8'));
+  const m = /```env\r?\n([\s\S]*?)```/.exec(fs.readFileSync(file, 'utf8'));
   const out = {};
-  for (const line of (m ? m[1] : '').split('\n')) {
+  for (const line of (m ? m[1] : '').split(/\r?\n/)) {
     const kv = /^([A-Z][A-Z0-9_]*)=(.*)$/.exec(line);
     if (kv) out[kv[1]] = kv[2];
   }
@@ -75,7 +75,9 @@ function setSecret(vault, key, value) {
   const all = { ...readSecrets(vault), [key]: String(value) };
   const block = '```env\n' + Object.entries(all).map(([k, v]) => `${k}=${v}`).join('\n') + '\n```';
   const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '# Secrets\n\nLocal only, never committed. Notes reference these values as `{{secret:KEY}}`.\n\n```env\n```\n';
-  fs.writeFileSync(file, /```env\n[\s\S]*?```/.test(text) ? text.replace(/```env\n[\s\S]*?```/, block) : `${text.replace(/\n*$/, '\n\n')}${block}\n`);
+  const BLOCK = /```env\r?\n[\s\S]*?```/;
+  // function replacement: secret values may contain "$&" and similar patterns
+  fs.writeFileSync(file, BLOCK.test(text) ? text.replace(BLOCK, () => block) : `${text.replace(/\n*$/, '\n\n')}${block}\n`);
 }
 
 const placeholder = (key) => `{{secret:${key}}}`;

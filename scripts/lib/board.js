@@ -16,8 +16,10 @@ function emptyBoard() {
   return '---\n\nkanban-plugin: board\n\n---\n\n' + STATUSES.map((s) => `## ${LANES[s]}\n\n`).join('') + SETTINGS + '\n```\n{"kanban-plugin":"board"}\n```\n%%\n';
 }
 
+// Boards saved with CRLF (git autocrlf on Windows) parse the same and are written back with CRLF.
 function parseBoard(text) {
-  const lines = text.split('\n');
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text.split(eol).map((l) => (eol === '\n' ? l : l.replace(/\r$/, '')));
   let tailAt = lines.findIndex((l) => l.startsWith(SETTINGS));
   if (tailAt < 0) tailAt = lines.length;
   const starts = [];
@@ -33,6 +35,7 @@ function parseBoard(text) {
     headCount: headEnd,
     lanes,
     tail: tailAt < lines.length ? lines.slice(tailAt).join('\n') : null,
+    eol,
   };
 }
 
@@ -41,7 +44,7 @@ function serializeBoard(b) {
   if (b.headCount !== 0) out.push(...b.head.split('\n'));
   for (const lane of b.lanes) out.push(lane.rawTitle || `## ${lane.title}`, ...lane.lines);
   if (b.tail !== null && b.tail !== undefined) out.push(...b.tail.split('\n'));
-  return out.join('\n');
+  return out.join(b.eol || '\n');
 }
 
 function linkOf(text) {

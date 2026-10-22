@@ -15,7 +15,8 @@ const SKIP_TOP = new Set(['90_Archive', '80_Assets', 'node_modules']);
 const LIST_ORDER = ['in-progress', 'todo', 'completed', 'discarded'];
 
 const today = (ctx) => ymd(ctx.now || new Date());
-const lower = (s) => s.toLowerCase();
+// Lookup key for note names: Unicode-normalized and case-insensitive, like Obsidian link resolution.
+const lower = (s) => String(s).normalize('NFC').toLowerCase();
 const nameOf = (file) => path.basename(file, '.md');
 
 function itemDir(vault, kind, project) {
@@ -74,12 +75,31 @@ function itemFiles(vault, kinds = ITEM_KINDS) {
 }
 
 function readNote(file) {
-  return frontmatter.parse(fs.readFileSync(file, 'utf8'));
+  const raw = fs.readFileSync(file, 'utf8');
+  const note = frontmatter.parse(raw);
+  return { ...note, raw, orig: JSON.stringify(note.data) };
 }
 
+// Writes back only the frontmatter keys that changed; the rest of the file stays as the user wrote it.
 function writeNote(ctx, file, note) {
   note.data.updated = today(ctx);
-  fs.writeFileSync(file, frontmatter.stringify(note.data, note.body));
+  const before = note.orig ? JSON.parse(note.orig) : {};
+  const changes = {};
+  for (const [k, v] of Object.entries(note.data)) if (JSON.stringify(before[k]) !== JSON.stringify(v)) changes[k] = v;
+  fs.writeFileSync(file, note.raw !== undefined ? frontmatter.setKeys(note.raw, changes) : frontmatter.stringify(note.data, note.body));
+}
+
+// A card's link → note file: exact name, then the last path segment, then the sanitized forms.
+function resolveLink(idx, link) {
+  const base = link.split('/').pop();
+  for (const c of [link, base]) {
+    if (idx.has(lower(c))) return idx.get(lower(c));
+    try {
+      const n = noteName(c);
+      if (idx.has(lower(n))) return idx.get(lower(n));
+    } catch {}
+  }
+  return null;
 }
 
 function kindOf(file, data) {
@@ -115,7 +135,8 @@ function createNote(ctx, kind, { name, project, feature, status, lifecycle }) {
   Object.assign(data, { created: day, updated: day });
   const body = templates.fill(templates.load(ctx.lang, `${kind}.md`), { title: name, date: day });
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, frontmatter.stringify(data, body));
+  // 'wx': never replace a note that already exists
+  fs.writeFileSync(file, frontmatter.stringify(data, body), { flag: 'wx' });
   return file;
 }
 
@@ -170,10 +191,15 @@ function syncFromBoard(ctx) {
   for (const pb of list) {
     for (const lane of pb.B.lanes) {
       const status = board.laneStatus(lane.title);
-      if (!status) continue;
       for (const card of board.cards(lane)) {
         let name = card.link;
-        let file = name ? idx.get(lower(name)) : null;
+        let file = name ? resolveLink(idx, name) : null;
+        // cards in user lanes (Review, the Kanban plugin's Archive…) keep their note: never re-add them elsewhere
+        if (!status) {
+          if (file) seen.add(lower(nameOf(file)));
+          continue;
+        }
+        if (name && !file) name = name.split('/').pop();
         if (!name) {
           try {
             name = noteName(card.text);
@@ -194,7 +220,13 @@ function syncFromBoard(ctx) {
           }
           if (!ITEM_KINDS.includes(kind)) continue;
         } else {
-          file = createNote(ctx, 'task', { name: noteName(name), project: pb.project, status });
+          let clean;
+          try {
+            clean = noteName(name);
+          } catch {
+            continue;
+          }
+          file = createNote(ctx, 'task', { name: clean, project: pb.project, status });
           idx.set(lower(nameOf(file)), file);
           res.notesCreated++;
         }
@@ -202,7 +234,9 @@ function syncFromBoard(ctx) {
         const note = readNote(file);
         if (note.data.status !== status) res.statusChanged++;
         if (applyStatus(ctx, note, status)) writeNote(ctx, file, note);
-        lane.lines[card.index] = board.cardLine({ checked: status === 'completed', text: card.link ? card.text : `[[${canon}]]` });
+        // point the card at the note's real name, keeping any alias or text after the link
+        const text = card.link ? card.text.replace(/\[\[[^\]|#]+/, `[[${canon}`) : `[[${canon}]]`;
+        lane.lines[card.index] = board.cardLine({ checked: status === 'completed', text });
         seen.add(lower(canon));
         const project = projectOfNote(file, note.data);
         if (pb.project === null && project && boards.isSplit(ctx, project)) routes.push({ from: pb, name: canon, status, project });
@@ -327,7 +361,8 @@ function moveItem(ctx, name, status) {
 function setBlocked(ctx, name, blocked) {
   syncFromBoard(ctx);
   const { file, note } = requireItem(ctx, name);
-  const tags = (Array.isArray(note.data.tags) ? note.data.tags : []).filter((t) => t !== 'status/blocked');
+  const own = note.data.tags;
+  const tags = (Array.isArray(own) ? own : typeof own === 'string' && own.trim() ? [own.trim()] : []).filter((t) => t !== 'status/blocked');
   if (blocked) tags.push('status/blocked');
   note.data.blocked = !!blocked;
   note.data.tags = tags;

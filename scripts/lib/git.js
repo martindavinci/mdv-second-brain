@@ -54,20 +54,31 @@ function excludeInParent(parentTop, dir) {
   return true;
 }
 
+// Never staged, whatever the vault's .gitignore says.
+const NEVER = [':(exclude,glob)**/*.local.md', ':(exclude,glob)**/.brain/**'];
+
 function commitPath(repo, pathspec, message) {
   if (!available()) return { committed: false, reason: 'git-unavailable' };
-  run(repo, ['add', '-A', '--', pathspec]);
+  const spec = ['--', pathspec, ...NEVER];
+  run(repo, ['add', '-A', ...spec]);
   try {
-    run(repo, ['diff', '--cached', '--quiet', '--', pathspec]);
+    run(repo, ['diff', '--cached', '--quiet', ...spec]);
     return { committed: false, reason: 'no-changes' };
   } catch {
-    run(repo, ['commit', '-q', '-m', message, '--', pathspec]);
+    run(repo, ['commit', '-q', '-m', message, ...spec]);
     return { committed: true };
   }
 }
 
+// Private files git already tracks under pathspec (they must be untracked before any commit).
+function trackedPrivate(repo, pathspec) {
+  const out = run(repo, ['ls-files', '--', pathspec]);
+  return out.split('\n').filter((f) => f && (f.endsWith('.local.md') || /(^|\/)\.brain\//.test(f)));
+}
+
 // git mv when the file is tracked, plain rename otherwise. Never overwrites: dest must not exist.
 function moveFile(src, dest) {
+  if (fs.existsSync(dest)) throw new Error('dest-exists');
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   const top = available() ? toplevel(path.dirname(src)) : null;
   if (top) {
@@ -134,4 +145,4 @@ function detectIdentity(dir, { vaultDir, home = require('node:os').homedir() } =
   return name && email ? { name, email, source: 'global' } : null;
 }
 
-module.exports = { run, available, toplevel, init, excludeInParent, commitPath, moveFile, detectIdentity, localIdentity };
+module.exports = { run, available, toplevel, init, excludeInParent, commitPath, trackedPrivate, moveFile, detectIdentity, localIdentity };

@@ -103,14 +103,16 @@ function insertUnder(lines, heading, newLines) {
 }
 
 function readLines(file, title) {
-  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n') : [`# ${title}`, ''];
+  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split(/\r?\n/) : [`# ${title}`, ''];
 }
 
+// Keeps the file's line endings (CRLF files stay CRLF).
 function writeLines(file, lines) {
   while (lines.length > 1 && lines[lines.length - 1] === '' && lines[lines.length - 2] === '') lines.pop();
   if (lines[lines.length - 1] !== '') lines.push('');
+  const eol = fs.existsSync(file) && fs.readFileSync(file, 'utf8').includes('\r\n') ? '\r\n' : '\n';
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, lines.join('\n'));
+  fs.writeFileSync(file, lines.join(eol));
 }
 
 function headingFor(ctx, project) {
@@ -133,7 +135,7 @@ function listIdeas(ctx, { project, open, limit = 20 } = {}) {
   const want = project ? projectName(project) : null;
   const out = [];
   for (const file of allFiles(ctx)) {
-    const lines = fs.readFileSync(file, 'utf8').split('\n');
+    const lines = readLines(file);
     let changed = false;
     for (const e of scan(lines)) {
       const i = parseLine(e.raw);
@@ -156,7 +158,7 @@ function listIdeas(ctx, { project, open, limit = 20 } = {}) {
 function updateIdea(ctx, id, fn) {
   listIdeas(ctx, { limit: 0 });
   for (const file of allFiles(ctx)) {
-    const lines = fs.readFileSync(file, 'utf8').split('\n');
+    const lines = readLines(file);
     for (const e of scan(lines)) {
       const i = parseLine(e.raw);
       if (i.id !== id) continue;
@@ -183,7 +185,7 @@ function archiveIdeas(ctx, now = new Date(), days = 14) {
   let arch = null;
   let moved = 0;
   for (const file of allFiles(ctx)) {
-    const lines = fs.readFileSync(file, 'utf8').split('\n');
+    const lines = readLines(file);
     const take = scan(lines).filter((e) => {
       const i = parseLine(e.raw);
       const closed = i.state !== 'open' && parseYmd(i.closed);
@@ -203,7 +205,7 @@ function archiveIdeas(ctx, now = new Date(), days = 14) {
 // Section "## heading" of a file: its idea lines (used by split/merge).
 function takeSection(file, heading) {
   if (!fs.existsSync(file)) return [];
-  const lines = fs.readFileSync(file, 'utf8').split('\n');
+  const lines = readLines(file);
   const start = lines.findIndex((l) => /^##\s+/.test(l) && l.replace(/^##\s+/, '').trim() === heading);
   if (start < 0) return [];
   let end = start + 1;

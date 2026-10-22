@@ -92,6 +92,14 @@ function handle(event, input, env) {
       vault.ensureVault(cfg, active.name, { cfgFile: env.cfgFile });
       state.update(active.vault, sid, active.name, now, (s) => (s.turnStartedAt = now.toISOString()));
     }
+    // the turn starts in every workspace this session touched, so Stop can block once per turn in each
+    const { vaultPathFor } = require('./lib/config');
+    for (const ws of (idx && idx.workspaces) || []) {
+      if (ws === active.name || !cfg.workspaces[ws]) continue;
+      const v = vaultPathFor(cfg, ws);
+      const s = state.load(v, sid);
+      if (s) state.save(v, sid, { ...s, turnStartedAt: now.toISOString() });
+    }
     if (idx && idx.contextSent === false) {
       const text = sessionContext(env, active.name, sid, cwd);
       state.writeIndex(stateDir, sid, { ...state.readIndex(stateDir, sid), contextSent: true });

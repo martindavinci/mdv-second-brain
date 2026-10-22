@@ -81,4 +81,37 @@ function stringify(data, body = '') {
   return lines.join('\n') + '\n' + body;
 }
 
-module.exports = { parse, stringify };
+const FENCE = /^---\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/;
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function formatEntry(k, v) {
+  const f = Array.isArray(v) ? `[${v.map(formatScalar).join(', ')}]` : formatScalar(v);
+  return f === '' ? `${k}:` : `${k}: ${f}`;
+}
+
+// Rewrites only the given keys, line by line; every other frontmatter line (comments, block scalars, nested maps) stays as written.
+function setKeys(text, changes) {
+  const m = FENCE.exec(text);
+  if (!m) return stringify(changes, text);
+  const head = m[1] ? m[1].split(/\r?\n/) : [];
+  for (const [k, v] of Object.entries(changes)) {
+    const line = formatEntry(k, v);
+    const i = head.findIndex((l) => new RegExp(`^${esc(k)}\\s*:`).test(l));
+    if (i < 0) {
+      head.push(line);
+      continue;
+    }
+    let end = i + 1;
+    while (end < head.length && /^(\s+\S|\s*-\s)/.test(head[end])) end++;
+    head.splice(i, end - i, line);
+  }
+  return `---\n${head.join('\n')}\n---\n${text.slice(m[0].length)}`;
+}
+
+// Replaces the body and keeps the frontmatter exactly as written.
+function setBody(text, body) {
+  const m = FENCE.exec(text);
+  return m ? text.slice(0, m[0].length) + body : body;
+}
+
+module.exports = { parse, stringify, setKeys, setBody };

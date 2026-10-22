@@ -65,7 +65,7 @@ function walk(dir, top, archive, out) {
     if (e.isDirectory()) {
       if (top && (SKIP_TOP.has(e.name) || (!archive && e.name === '90_Archive'))) continue;
       walk(full, false, archive, out);
-    } else if (e.name.endsWith('.md')) out.push(full);
+    } else if (e.name.endsWith('.md') && !e.name.endsWith('.local.md')) out.push(full); // secrets and private prose never reach the context
   }
   return out;
 }

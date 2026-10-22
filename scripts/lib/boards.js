@@ -46,20 +46,31 @@ function writeBoard(file, B) {
   fs.writeFileSync(file, require('./board').serializeBoard(B));
 }
 
-// Moves every card of `from` that `pick` accepts into the lane with the same status (or title) of `to`, order kept.
+// Moves every card of `from` that `pick` accepts (free-text ones too, with their sub-lines)
+// into the lane with the same status (or title) of `to`, order kept.
 function moveCards(from, to, pick) {
   const board = require('./board');
   let moved = 0;
   for (const lane of from.lanes) {
     const status = board.laneStatus(lane.title);
-    for (const c of board.cards(lane).filter(pick)) {
-      const removed = board.removeCardByLink(from, c.link);
-      if (!removed) continue;
-      board.appendCardLines(status ? board.ensureStatusLane(to, status) : board.ensureLane(to, lane.title), removed.lines);
-      moved++;
-    }
+    const spans = board.cards(lane).filter(pick).map((c) => [c.index, board.cardSpan(lane, c.index)]);
+    if (!spans.length) continue;
+    const target = status ? board.ensureStatusLane(to, status) : board.ensureLane(to, lane.title);
+    for (const [start, end] of spans) board.appendCardLines(target, lane.lines.slice(start, end));
+    for (const [start, end] of spans.reverse()) lane.lines.splice(start, end - start);
+    moved += spans.length;
   }
   return moved;
+}
+
+// True when a parsed board still holds anything but blank lines and lane headings.
+function hasLeftovers(B) {
+  return B.lanes.some((l) => l.lines.some((x) => x.trim() && x.trim() !== '***'));
+}
+
+function archiveFile(ctx, file) {
+  const tasks = require('./tasks');
+  return tasks.moveToArchive(ctx, file);
 }
 
 function splitProject(ctx, raw) {
@@ -92,6 +103,7 @@ function mergeProject(ctx, raw) {
   const p = checkName(raw);
   const file = projectBoardFile(ctx, p);
   if (!fs.existsSync(file)) throw new Error('not-split');
+  require('./tasks').syncFromBoard(ctx);
   const main = readBoard(ctx.boardFile);
   const own = readBoard(file);
   const cardsMoved = moveCards(own.B, main.B, () => true);
@@ -104,12 +116,17 @@ function mergeProject(ctx, raw) {
     const title = (ideas.TEXT[ctx.lang] || ideas.TEXT.en).title;
     ideas.writeLines(target, ideas.insertUnder(ideas.readLines(target, title), p, lines));
   }
-  for (const f of fs.readdirSync(dir)) {
-    const full = path.join(dir, f);
-    const generated = f === `${p} Bugs.md` || f === `${p} Features.md`;
-    const emptyIdeas = f === `${p} Ideas.md` && !/^- \[/m.test(fs.readFileSync(full, 'utf8'));
-    if (f === `${p} Plan.md` || generated || emptyIdeas) fs.rmSync(full);
+  // what is left is either empty (removed) or written by the user (archived, never deleted)
+  if (hasLeftovers(own.B)) {
+    writeBoard(file, own.B);
+    archiveFile(ctx, file);
+  } else fs.rmSync(file);
+  if (fs.existsSync(ideasOwn)) {
+    const rest = fs.readFileSync(ideasOwn, 'utf8').split(/\r?\n/).filter((l) => l.trim() && !/^# /.test(l));
+    if (rest.length) archiveFile(ctx, ideasOwn);
+    else fs.rmSync(ideasOwn);
   }
+  for (const f of [`${p} Bugs.md`, `${p} Features.md`]) fs.rmSync(path.join(dir, f), { force: true });
   if (!fs.readdirSync(dir).length) fs.rmdirSync(dir);
   require('./indexes').rebuildIndexes(ctx);
   return { cardsMoved, ideasMoved: lines.filter((l) => /^- \[/.test(l)).length };

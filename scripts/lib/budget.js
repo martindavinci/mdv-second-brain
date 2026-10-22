@@ -84,7 +84,9 @@ function rotateLogs(ctx) {
     const prev = fs.existsSync(archFile) ? fs.readFileSync(archFile, 'utf8').replace(/\n*$/, '\n') : `# ${name} — Log\n\n`;
     fs.writeFileSync(archFile, prev + moved.join('\n') + '\n');
     const newSec = [heading, link, ...keep].join('\n');
-    fs.writeFileSync(file, frontmatter.stringify(data, body.replace(sec, newSec)));
+    // splice by index (a "$&" in the log must stay literal) and keep the frontmatter as written
+    const at = body.indexOf(sec);
+    fs.writeFileSync(file, frontmatter.setBody(text, body.slice(0, at) + newSec + body.slice(at + sec.length)));
     rotated++;
   }
   return rotated;

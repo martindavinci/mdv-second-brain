@@ -68,7 +68,9 @@ function rollover(vault, now = new Date(), days = 7) {
   for (const f of dailyFiles(vault)) {
     const d = parseYmd(f);
     if (!d || Math.round((today - d.getTime()) / 86400000) <= days) continue;
-    const dest = path.join(vault, '90_Archive', 'Daily', f);
+    // same date already archived (a session resumed days later): keep both files
+    let dest = path.join(vault, '90_Archive', 'Daily', f);
+    for (let n = 2; fs.existsSync(dest); n++) dest = path.join(vault, '90_Archive', 'Daily', f.replace(/\.md$/, ` (${n}).md`));
     git.moveFile(path.join(dailyDir(vault), f), dest);
     moved.push(dest);
   }

@@ -11,7 +11,7 @@ A Claude Code plugin that keeps an Obsidian-compatible **second brain** for each
 ## Requirements
 
 - Claude Code with plugin support.
-- Node.js ≥ 18 (no dependencies). Without Node the plugin stays inactive and says so at session start.
+- Node.js ≥ 18 (no dependencies). Without Node the plugin stays inactive and silent.
 - git (optional): without it the vault is still written, just not committed.
 
 ## Install
@@ -57,7 +57,11 @@ In the folder you work in, say **"attiva brain per questa chat"** / **"enable th
       "vault": "<optional custom vault path>",
       "language": "<language code>",
       "board": "00_Inbox/Plan.md",
-      "git": { "mode": "per-workspace", "config": { "include.path": "<relative path to a .gitconfig>" } }
+      "git": {
+        "mode": "per-workspace",
+        "identity": { "name": "<commit name>", "email": "<commit email>" },
+        "config": { "include.path": "<relative path to a .gitconfig>" }
+      }
     }
   },
   "ignore": ["<folders the plugin must never touch>"]
@@ -65,8 +69,10 @@ In the folder you work in, say **"attiva brain per questa chat"** / **"enable th
 ```
 
 - `git.mode`: `per-workspace` (one repo per vault), `single` (the root is one repo), `none`, `host` (commit into the repo that contains the vault).
-- `git.config`: local git settings applied to the vault repo before every commit — use it to commit with the identity of that workspace. Global git config is never changed.
+- `git.identity`: the commit identity of that workspace, found at activation — the folder's repo, a `.gitconfig` in the folder or above it, the repos inside it, or the author of the latest commit there; the global identity is never stored. It is passed to each commit (`git -c`), so shared repos never collect identities; in `host` mode a repo with its own identity keeps it.
+- `git.config`: local git settings written into the vault's own repo (`per-workspace` only), so commits you make there by hand match. Global git config is never changed.
 - `language: auto`: the vault language is fixed from your chat language at activation.
+- Only the values that differ from the defaults are saved, so new defaults reach you on update.
 
 ## Vault
 
@@ -103,7 +109,7 @@ The board has four lanes — ToDo, In Progress, Completed, Discarded — and the
 | `brain task list` · `show` · `move` · `block` · `unblock` · `done` · `discard` · `delete --yes` · `sync` | manage tasks and issues |
 | `brain feature add "<Name>"` · `brain project add <p>` · `brain postmortem add "<title>"` | create notes from the templates |
 | `brain idea add` · `list` · `promote <id> --to "<Name>"` · `discard <id>` | ideas |
-| `brain context` · `brain search "<text>"` | bounded reads |
+| `brain context` · `brain show "<Name>" [--section <heading>] [--max-chars]` · `brain search "<text>"` | bounded reads |
 | `brain project list` · `split <p>` · `merge <p>` | give a project its own board and indexes, or fold it back |
 | `brain secret set` · `get` · `list` | values in `secrets.local.md`, referenced as `{{secret:KEY}}` |
 | `brain workspace add` · `list` · `map` · `ignore` | edit the config |

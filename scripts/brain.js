@@ -378,6 +378,35 @@ function cmdPostmortem(env, sub, args) {
   return out(env, r, `post mortem created: ${rel(ctx, r.file)} — fill every section`);
 }
 
+function cmdAdopt(env, args) {
+  const adopt = require('./lib/adopt');
+  const src = path.resolve(env.cwd, requireArg(args[0], 'vault path'));
+  const ws = requireArg(str(env.flags.as), '--as <workspace>');
+  config.assertWorkspaceName(ws);
+  if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) throw new CliError(2, `not a folder: ${src}`);
+  const existing = env.cfg.workspaces[ws];
+  if (existing && existing.vault && path.resolve(existing.vault) !== src) throw new CliError(2, `workspace ${ws} already has another vault`);
+  const plan = adopt.planAdopt(src, new Date());
+  if (!env.flags.apply) {
+    const lines = [
+      `dry run — nothing changed. Run again with --apply${str(env.flags.language) ? '' : ' --language <code>'} to adopt ${src} as ${ws}.`,
+      ...plan.moves.map((m) => `move ${m.from} → ${m.to}`),
+      ...plan.conflicts.map((m) => `skip ${m.from} → ${m.to} (target exists)`),
+      `board: ${plan.board || 'none found (a new 00_Inbox/Plan.md)'}`,
+      plan.tasksFile ? `${plan.tasksFile}: ${plan.taskItems.length} items → task notes + cards, original kept as TASKS.legacy.md` : 'no TASKS.md checklist',
+      `left as they are: ${plan.untouched.join(', ') || 'nothing'}`,
+    ];
+    return out(env, plan, lines.join('\n'));
+  }
+  try {
+    const r = adopt.applyAdopt(env.cfg, src, ws, plan, env.cfgFile, { language: str(env.flags.language) });
+    return out(env, r, `adopted: ${r.moved} moved, ${r.tasksCreated} tasks created → workspace ${ws}`);
+  } catch (e) {
+    if (e.message === 'language-required') throw new CliError(4, `language-required: run: brain adopt ${args[0]} --as ${ws} --apply --language <code>`);
+    throw e;
+  }
+}
+
 function runIndex(env, ctx) {
   const { cfg } = env;
   const now = new Date();
@@ -457,7 +486,7 @@ const ERRORS = {
   'invalid-config': () => new CliError(2, `invalid config file: ${config.configPath()}`),
 };
 
-const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|context|search|project|postmortem|workspace|secret|index|commit|status> …';
+const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|context|search|project|postmortem|workspace|secret|index|commit|status|adopt> …';
 
 async function main(argv, io = {}) {
   const stdout = io.stdout || process.stdout;
@@ -499,6 +528,9 @@ async function main(argv, io = {}) {
         break;
       case 'postmortem':
         cmdPostmortem(env, sub, rest);
+        break;
+      case 'adopt':
+        cmdAdopt(env, args);
         break;
       case 'context':
         cmdContext(env);

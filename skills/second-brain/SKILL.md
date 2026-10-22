@@ -60,4 +60,4 @@ Orient with `brain context`, then `brain task show "<Name>" --section <heading> 
 - Never touch Claude Code memory files. Never push.
 
 ## Commands
-`task|issue add|list|show|move|block|unblock|done|discard|delete`, `task sync`, `feature add`, `idea add|list|promote|discard`, `context`, `search`, `project add|list|split|merge`, `postmortem add`, `index`, `commit -m`, `status`, `secret set|get|list`, `workspace add|list|map|ignore`, `init`, `attach`, `detach`.
+`task|issue add|list|show|move|block|unblock|done|discard|delete`, `task sync`, `feature add`, `idea add|list|promote|discard`, `context`, `search`, `project add|list|split|merge`, `postmortem add`, `index`, `commit -m`, `status`, `secret set|get|list`, `workspace add|list|map|ignore`, `init`, `attach`, `detach`, `adopt <path> --as <ws>` (dry run; `--apply` only after the user confirms the plan).

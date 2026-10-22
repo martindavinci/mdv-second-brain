@@ -79,6 +79,62 @@ test('project rename refuses an unknown project and a taken name', async () => {
   assert.equal((await brain('project', 'rename', 'alpha', 'tools')).code, 6);
 });
 
+test('project rename never overwrites: an archive or a folder with the new name stops it before any move', async () => {
+  const { brain, v } = await vaultWithAlpha();
+  write(join(v, '90_Archive', 'omega', 'Tasks', 'Old.md'), '---\ntype: task\n---\n# Old\n');
+  assert.equal((await brain('project', 'rename', 'alpha', 'omega')).code, 6);
+  assert.ok(fs.existsSync(join(v, '20_Projects', 'alpha.md')));
+  assert.match(read(join(v, '90_Archive', 'alpha', 'Tasks', 'Old.md')), /project: alpha/);
+  write(join(v, '20_Projects', 'Delta', 'Tasks', 'X.md'), '---\ntype: task\n---\n# X\n');
+  assert.equal((await brain('project', 'rename', 'alpha', 'delta')).code, 6);
+  assert.ok(fs.existsSync(join(v, '20_Projects', 'alpha.md')));
+});
+
+test('project rename puts every file back when a move fails half way', async () => {
+  const { brain, v } = await vaultWithAlpha();
+  const real = fs.renameSync;
+  let calls = 0;
+  fs.renameSync = (...a) => {
+    if (++calls === 3) throw Object.assign(new Error('EBUSY: resource busy'), { code: 'EBUSY' });
+    return real(...a);
+  };
+  try {
+    assert.notEqual((await brain('project', 'rename', 'alpha', 'omega')).code, 0);
+  } finally {
+    fs.renameSync = real;
+  }
+  assert.ok(fs.existsSync(join(v, '20_Projects', 'alpha.md')));
+  assert.ok(fs.existsSync(join(v, '20_Projects', 'alpha', 'Tasks', 'Login.md')));
+  assert.ok(!fs.existsSync(join(v, '20_Projects', 'omega.md')));
+  assert.ok(!fs.existsSync(join(v, '20_Projects', 'omega')));
+});
+
+test('project rename of a project without a hub moves its tasks to the new name', async () => {
+  const { brain, v } = await vaultWithAlpha();
+  assert.equal((await brain('task', 'add', 'Draft', '--project', 'gamma')).code, 0);
+  assert.equal((await brain('project', 'rename', 'gamma', 'delta')).code, 0);
+  assert.equal(fm(join(v, '20_Projects', 'delta', 'Tasks', 'Draft.md')).project, '[[delta]]');
+  assert.match((await brain('task', 'list', '--project', 'delta')).text, /Draft/);
+});
+
+test('project rename keeps $ in the new name literal, follows a heading in any case, and carries hidden folders', async () => {
+  const { brain, v } = await vaultWithAlpha();
+  fs.writeFileSync(join(v, '00_Inbox', 'Ideas.md'), read(join(v, '00_Inbox', 'Ideas.md')).replace('## alpha', '## Alpha'));
+  write(join(v, '20_Projects', 'alpha', 'tool', '.git', 'HEAD'), 'ref: refs/heads/main\n');
+  assert.equal((await brain('project', 'rename', 'alpha', "Pay$'")).code, 0);
+  const ideas = read(join(v, '00_Inbox', 'Ideas.md'));
+  assert.match(ideas, /^## Pay\$'$/m);
+  assert.equal(ideas.match(/Dark mode/g).length, 1);
+  assert.ok(fs.existsSync(join(v, '20_Projects', "Pay$'", 'tool', '.git', 'HEAD')));
+  assert.ok(!fs.existsSync(join(v, '20_Projects', 'alpha')));
+});
+
+test('a project name made only of dots is refused', async () => {
+  const { brain } = await vaultWithAlpha();
+  assert.equal((await brain('project', 'rename', 'alpha', '..')).code, 2);
+  assert.equal((await brain('project', 'add', '...')).code, 2);
+});
+
 // --- the bootstrap side ---
 
 const g = (dir, args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -124,5 +180,7 @@ test('bootstrap recognises a renamed repo folder, holds it back, and the rename 
   assert.equal((await brain('project', 'rename', 'old-app', 'new-app')).code, 0);
   const after = (await brain('--json', 'bootstrap', '--dry-run')).json();
   assert.deepEqual(after.renames, []);
+  assert.deepEqual(after.orphans, ['gone']);
   assert.equal(after.repos.find((r) => r.folder === 'new-app').status, 'existing');
+  assert.match((await brain('status')).text, /1 hubs without their repo folder/);
 });

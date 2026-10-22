@@ -16,6 +16,8 @@ function noteName(title) {
 
 function projectName(raw) {
   const n = noteName(raw);
+  // "..": a folder outside 20_Projects
+  if (/^\.+$/.test(n)) throw new Error('reserved-name');
   return RESERVED.has(n.toLowerCase()) ? `${n} (project)` : n;
 }
 

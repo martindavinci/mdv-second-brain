@@ -17,7 +17,7 @@ A Claude Code plugin that keeps an Obsidian-compatible **second brain** for each
 ## Install
 
 ```
-/plugin marketplace add <owner>/mdv-second-brain
+/plugin marketplace add martindavinci/mdv-second-brain
 /plugin install mdv-second-brain@mdv-second-brain
 ```
 
@@ -122,3 +122,7 @@ The board has four lanes — ToDo, In Progress, Completed, Discarded — and the
 - Nothing personal ships with the plugin: no paths, names or identities. Your configuration lives in `~/.config/mdv-second-brain/`.
 - Secrets go only in `secrets.local.md`; other `*.local.md` files hold private prose. Both are gitignored, and every commit is scanned for keys and passwords first.
 - The plugin never pushes.
+
+## License
+
+[MIT](LICENSE)

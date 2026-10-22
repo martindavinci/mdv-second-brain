@@ -3,6 +3,11 @@
   "description": "Keeps an Obsidian-compatible second-brain vault per workspace while you work: Kanban board with living task and issue notes, daily session state, distilled project knowledge, strict workspace isolation.",
   "version": "0.1.0",
   "author": {
-    "name": "Martin DaVinci"
-  }
+    "name": "Martin DaVinci",
+    "url": "https://github.com/martindavinci"
+  },
+  "homepage": "https://github.com/martindavinci/mdv-second-brain",
+  "repository": "https://github.com/martindavinci/mdv-second-brain",
+  "license": "MIT",
+  "keywords": ["second-brain", "obsidian", "kanban", "notes", "memory", "workflow"]
 }

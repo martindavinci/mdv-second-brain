@@ -3,6 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "description": "Claude Code plugin that keeps an Obsidian-compatible second-brain vault per workspace while you work.",
+  "license": "MIT",
+  "author": "Martin DaVinci",
+  "homepage": "https://github.com/martindavinci/mdv-second-brain",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/martindavinci/mdv-second-brain.git"
+  },
+  "bugs": {
+    "url": "https://github.com/martindavinci/mdv-second-brain/issues"
+  },
   "engines": {
     "node": ">=18"
   },

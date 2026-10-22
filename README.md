@@ -30,16 +30,16 @@ codex plugin marketplace add martindavinci/mdv-second-brain
 codex plugin add mdv-second-brain@mdv-second-brain
 ```
 
-Then start `codex` once: at startup it shows **Hooks need review** — choose **Trust all and continue**. Codex never runs plugin hooks you have not trusted, and asks again when an update changes them. `/hooks` lists the four hooks (SessionStart, UserPromptSubmit, PostToolUse, Stop); all four must be trusted and enabled.
+Then start `codex` once: at startup it shows **Hooks need review** — choose **Trust all and continue**. Codex never runs plugin hooks you have not trusted, and asks again when an update changes them. `/hooks` lists the four hooks (SessionStart, UserPromptSubmit, PostToolUse, Stop); all four must be trusted and enabled — to re-enable one, select its event, then the second-brain handler, and toggle it on.
 
-Codex runs the agent's commands in a sandbox: the vault root and the plugin's configuration folder must be writable, otherwise every vault write asks for approval. Add them in `~/.codex/config.toml` (absolute paths):
+Codex runs the agent's commands in a sandbox, and a plugin cannot widen it: the vault root and the plugin's configuration folder must be writable, otherwise every vault write asks for approval. Add them in `~/.codex/config.toml` (`~` is expanded; `%USERPROFILE%` is not):
 
 ```toml
 [sandbox_workspace_write]
-writable_roots = ["/absolute/path/to/SecondBrain", "/absolute/path/to/.config/mdv-second-brain"]
+writable_roots = ["~/Documents/SecondBrain", "~/.config/mdv-second-brain"]
 ```
 
-or use project mode (`brain init --here`), which keeps everything inside the folder.
+or start Codex with `codex --add-dir ~/Documents/SecondBrain --add-dir ~/.config/mdv-second-brain`, or use project mode (`brain init --here`), which keeps everything inside the folder.
 
 Both hosts share the same configuration and vaults: a workspace activated in one is active in the other.
 

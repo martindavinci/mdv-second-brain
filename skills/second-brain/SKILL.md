@@ -11,7 +11,7 @@ CLI: `node "${CLAUDE_SKILL_DIR}/../../scripts/brain.js" --session ${CLAUDE_SESSI
 
 ## Activation (only when the user asks)
 Outside a workspace the plugin is inert: do nothing unless the user asks to activate it.
-- Guided (`/brain init`, "attiva brain qui", "attiva brain per questa chat"): run `brain --json init --plan`, then ask ONE round of at most 4 questions with AskUserQuestion (if unavailable, one plain message with numbered options). Recommended option first; skip what the plan already answers (`mapped` set → just bind with `brain init <mapped>`).
+- Guided (`/brain init` or `$second-brain init`, "attiva brain qui", "attiva brain per questa chat"): run `brain --json init --plan`, then ask ONE round of at most 4 questions with the host's question tool (AskUserQuestion, or request_user_input in Codex; if neither is available, one plain message with numbered options). Recommended option first; skip what the plan already answers (`mapped` set → just bind with `brain init <mapped>`).
   1. What to activate: this folder (recommended) / the parent folder with all its projects (offer when `parentHasRepos`) / only this chat.
   2. Workspace: new `<defaultName>` (recommended) / an existing one from `workspaces` (the only time other workspace names may be shown).
   3. Vault: common root `<defaultVault>` (recommended) / inside the folder `<insideVault>` / a custom path.
@@ -19,7 +19,7 @@ Outside a workspace the plugin is inert: do nothing unless the user asks to acti
   Never ask the language: use the code of the user's chat language.
   Then run `brain init <ws> --path <dir> [--vault <dir>] --git-mode per-workspace|none|host [--identity detected|global] --language <code>`.
   For "only this chat" never map the folder: a new workspace is `brain workspace add <ws> --language <code> [--vault <dir>]`, then `brain attach <ws>`.
-- Quick ("attiva brain con i default", `/brain init --quick`): `brain init --quick --language <code>`, no questions.
+- Quick ("attiva brain con i default", `/brain init --quick` or `$second-brain init --quick`): `brain init --quick --language <code>`, no questions.
 - Off for this chat ("disattiva brain"): `brain detach`.
 Finish with the single line the CLI prints. The workspace context arrives with the next message.
 
@@ -34,7 +34,7 @@ Finish with the single line the CLI prints. The workspace context arrives with t
 - Spec or plan files written in chat: summarise them into the feature note (summary, rules, open decisions, sources with the path) and TODOs into the task; never a full copy.
 
 ## When a piece is done (level 2)
-Triggers: task completed, bug fixed, decision taken, the user says a part is finished, `/brain distill`.
+Triggers: task completed, bug fixed, decision taken, the user says a part is finished, `/brain distill` or `$second-brain distill`.
 1. Move the card (`brain task done "<Name>"` or `brain issue done "<Name>"`).
 2. Distil what lasts, following the vault's WORKFLOW.md:
    - feature note in the project's `Features/` (`brain feature add "<Name>"` when missing): implementation table ✅🟡❌🔒, rules, lessons; `lifecycle` proposed | available | retired, never "completed";
@@ -53,12 +53,13 @@ Orient with `brain context`, then `brain show "<Name>" --section <heading> --max
 - Never delete notes. `brain task delete "<Name>" --yes` archives, and only when the user asks. Feature notes, hubs and distilled notes are current truth: rewrite obsolete prose. Tasks, issues, post mortems, dailies, `DECISIONS.md`, `MEMORY.md`, `Ideas.md` are history: mark lines, never remove them.
 - Never touch user-written sections, generated files, or `<!-- brain:… -->` sections other than your own session section.
 - Isolation: the content of one workspace never mentions another workspace — no links, names or summaries, in the vault, in context or in replies — unless the user explicitly asks.
+- Subagents: when you delegate work that may write the vault, give the subagent your exact `cli:` line, `--session` included.
 - Never interrupt a task to ask. Queue questions and ask once at the end; meanwhile use a sensible default and note it.
 - Silent: at most one line about the brain at the end of a reply, and only after a distillation or a commit.
 - Secrets: `brain secret set KEY value`, then write `{{secret:KEY}}` in notes; private prose goes in `<note>.local.md`. `brain commit` exit 5 means a secret was found: move it to `secrets.local.md`, put the placeholder, commit again, say so in one line at the end.
 - Project relations (`depends_on`, `used_by`, `source_of`, `related` in the hub) only when the work confirms them.
 - Never split or merge a project on your own: `brain project split <p>` / `brain project merge <p>` only when the user asks.
-- Never touch Claude Code memory files. Never push.
+- Never touch the coding agent's own memory files (Claude Code memory, Codex memories). Never push.
 
 ## Commands
 `checkpoint`, `show`, `task|issue add|list|show|move|block|unblock|done|discard|delete`, `task sync`, `feature add`, `idea add|list|promote|discard`, `context`, `search`, `project add|list|split|merge`, `postmortem add`, `index`, `commit -m`, `status`, `secret set|get|list`, `workspace add|list|map|ignore`, `init`, `attach`, `detach`, `adopt <path> --as <ws>` (dry run; `--apply` only after the user confirms the plan).

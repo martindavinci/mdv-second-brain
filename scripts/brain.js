@@ -563,6 +563,9 @@ async function main(argv, io = {}) {
   const stderr = io.stderr || process.stderr;
   const cwd = io.cwd || process.cwd();
   const { flags, pos } = parseArgs(argv);
+  // Codex has no session substitution in skills: its shell exposes the thread id instead
+  const hostSid = io.env && (io.env.CODEX_THREAD_ID || io.env.CODEX_SESSION_ID);
+  if (!sessionOf(flags).sid && hostSid) flags.session = hostSid;
   const cfgFile = str(flags.config) || config.configPath();
   try {
     const cfg = config.loadConfig(cfgFile);
@@ -640,7 +643,7 @@ async function main(argv, io = {}) {
 }
 
 if (require.main === module) {
-  main(process.argv.slice(2)).then((code) => {
+  main(process.argv.slice(2), { env: process.env }).then((code) => {
     process.exitCode = code;
   });
 }

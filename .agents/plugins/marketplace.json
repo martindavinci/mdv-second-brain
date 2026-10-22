@@ -1,0 +1,9 @@
+{
+  "name": "mdv-second-brain",
+  "plugins": [
+    {
+      "name": "mdv-second-brain",
+      "source": { "source": "local", "path": "./" }
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # mdv-second-brain
 
-A Claude Code plugin that keeps an Obsidian-compatible **second brain** for each workspace while you work: a Kanban board whose cards link to living task and issue notes, a daily note with the state of every session, distilled project knowledge, ideas, decisions and post mortems — written by Claude, without you asking, and without mixing workspaces.
+A Claude Code and Codex plugin that keeps an Obsidian-compatible **second brain** for each workspace while you work: a Kanban board whose cards link to living task and issue notes, a daily note with the state of every session, distilled project knowledge, ideas, decisions and post mortems — written by Claude, without you asking, and without mixing workspaces.
 
 - **Zero manual work.** Claude creates the task when work starts, keeps its status current, distils what lasts into the feature and project notes when a piece is done, and commits the vault.
 - **Never forgets.** Hooks track what changed in the session; if Claude edited your project but not the vault, it is reminded once before it stops. If a session dies, the next one starts from the last checkpoint.
@@ -10,27 +10,40 @@ A Claude Code plugin that keeps an Obsidian-compatible **second brain** for each
 
 ## Requirements
 
-- Claude Code with plugin support.
-- Node.js ≥ 18 (no dependencies). Without Node the plugin stays inactive and silent.
+- Claude Code with plugin support, or Codex CLI with plugins and hooks (0.163 or later).
+- Node.js ≥ 18 (no dependencies). Without Node the plugin stays inactive (silent in Claude Code; Codex reports the failed hook).
 - git (optional): without it the vault is still written, just not committed.
 
 ## Install
+
+Claude Code:
 
 ```
 /plugin marketplace add martindavinci/mdv-second-brain
 /plugin install mdv-second-brain@mdv-second-brain
 ```
 
+Codex:
+
+```
+codex plugin marketplace add martindavinci/mdv-second-brain
+codex plugin add mdv-second-brain@mdv-second-brain
+```
+
+Then open Codex once, run `/hooks` and trust the plugin's four hooks: Codex never runs plugin hooks you have not trusted, and asks again when an update changes them.
+
+Both hosts share the same configuration and vaults: a workspace activated in one is active in the other.
+
 ## Activate
 
-In the folder you work in, say **"attiva brain per questa chat"** / **"enable the second brain here"**, or run `/brain init`. Claude asks one round of questions:
+In the folder you work in, say **"attiva brain per questa chat"** / **"enable the second brain here"**, or run `/brain init` (Claude Code) / `$second-brain init` (Codex). The agent asks one round of questions:
 
 1. what to activate — this folder, the parent folder with all its projects, or only this chat;
 2. which workspace — a new one or an existing one;
 3. where the vault lives — the common root, inside the folder, or a custom path;
 4. git — its own repo with the identity found in the folder, the global identity, no git, or inside the repo that already contains the vault.
 
-`/brain init --quick` uses the defaults without questions. "disattiva brain per questa chat" (`brain detach`) turns it off for the current chat.
+`/brain init --quick` (`$second-brain init --quick` in Codex) uses the defaults without questions. "disattiva brain per questa chat" (`brain detach`) turns it off for the current chat.
 
 ## Storage layouts
 
@@ -99,7 +112,7 @@ The board has four lanes — ToDo, In Progress, Completed, Discarded — and the
 
 ## Commands
 
-`/brain <command>` or plain language. The CLI is `node scripts/brain.js`.
+`/brain <command>` in Claude Code, `$second-brain <command>` in Codex, or plain language. The CLI is `node scripts/brain.js`.
 
 | Command | What it does |
 |---|---|

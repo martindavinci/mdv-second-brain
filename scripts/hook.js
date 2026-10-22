@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 // Hook entry: session-start | prompt | post-tool | stop. Never throws, always exits 0, prints nothing on error.
-// Only node built-ins are loaded until a config file exists: outside the second brain the cost is one stat.
+// Only node built-ins are loaded until a config file exists: outside the second brain the cost is one stat
+// and draining stdin.
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -63,6 +64,47 @@ function capturing(cfg, abs) {
   return (cfg.capturePatterns || []).some((pat) => p.includes(fold('/' + String(pat).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') + '/')));
 }
 
+// One file written by a tool: a vault file flushes, a workspace file makes the session dirty.
+function touched(env, sid, abs, out, gone = false) {
+  const { cfg, now, stateDir } = env;
+  const state = require('./lib/state');
+  const vault = require('./lib/vault');
+  const { resolveWorkspace, projectFor } = require('./lib/resolve');
+  const idx = state.readIndex(stateDir, sid);
+  const r = resolveWorkspace(cfg, abs);
+  if (r.status === 'mapped' && r.via === 'vault') {
+    if (idx.workspaces.includes(r.name)) state.markFlushed(r.vault, sid, now, r.name);
+    return;
+  }
+  const ws = r.status === 'mapped' ? r.name : r.status === 'unmapped' && idx.attached ? idx.origin : null;
+  if (!ws) return;
+  const lang = vault.languageFor(cfg, ws);
+  if (!lang) return;
+  const { vaultPathFor } = require('./lib/config');
+  const daily = require('./lib/daily');
+  const { switchContext, captureLine } = require('./lib/context');
+  const { projectName } = require('./lib/names');
+  const v = vaultPathFor(cfg, ws);
+  vault.ensureVault(cfg, ws, { cfgFile: env.cfgFile });
+  const s = state.load(v, sid) || state.fresh(sid, ws, now);
+  s.dirtyAt = now.toISOString();
+  const sec = daily.ensureSessionSection(v, lang, sid, s.startedAt);
+  s.dailyFile = sec.file;
+  if (ws !== idx.origin) state.addWorkspace(stateDir, sid, ws);
+  // every change of workspace is announced, the way back to the origin too: the model must drop the
+  // previous workspace's CLI line before writing anything
+  if (ws !== (idx.current || idx.origin)) {
+    out.push(switchContext({ ws, vault: v, dailyFile: sec.file, marker: sec.marker, cli: env.cli, sid, back: ws === idx.origin }));
+    state.writeIndex(stateDir, sid, { ...state.readIndex(stateDir, sid), current: ws });
+  }
+  if (!gone && capturing(cfg, abs) && !(s.captured || []).includes(abs)) {
+    const raw = r.status === 'mapped' ? projectFor(cfg, ws, abs) : null;
+    out.push(captureLine(abs, raw ? projectName(raw) : null));
+    s.captured = [...(s.captured || []), abs];
+  }
+  state.save(v, sid, s);
+}
+
 function handle(event, input, env) {
   const { loadConfig } = require('./lib/config');
   const state = require('./lib/state');
@@ -109,44 +151,9 @@ function handle(event, input, env) {
   }
 
   if (event === 'post-tool') {
-    const ti = input.tool_input || {};
-    const target = ti.file_path || ti.notebook_path;
-    if (!target || typeof target !== 'string') return '';
-    const abs = path.resolve(cwd, target);
-    const { resolveWorkspace, projectFor } = require('./lib/resolve');
-    const r = resolveWorkspace(cfg, abs);
-    if (r.status === 'mapped' && r.via === 'vault') {
-      if (idx.workspaces.includes(r.name)) state.markFlushed(r.vault, sid, now, r.name);
-      return '';
-    }
-    const ws = r.status === 'mapped' ? r.name : r.status === 'unmapped' && idx.attached ? idx.origin : null;
-    if (!ws) return '';
-    const lang = vault.languageFor(cfg, ws);
-    if (!lang) return '';
-    const { vaultPathFor } = require('./lib/config');
-    const daily = require('./lib/daily');
-    const { switchContext, captureLine } = require('./lib/context');
-    const { projectName } = require('./lib/names');
-    const v = vaultPathFor(cfg, ws);
-    vault.ensureVault(cfg, ws, { cfgFile: env.cfgFile });
-    const s = state.load(v, sid) || state.fresh(sid, ws, now);
-    s.dirtyAt = now.toISOString();
-    const sec = daily.ensureSessionSection(v, lang, sid, s.startedAt);
-    s.dailyFile = sec.file;
+    const { toolPaths } = require('./lib/patch');
     const out = [];
-    if (ws !== idx.origin) state.addWorkspace(stateDir, sid, ws);
-    // every change of workspace is announced, the way back to the origin too: the model must drop the
-    // previous workspace's CLI line before writing anything
-    if (ws !== (idx.current || idx.origin)) {
-      out.push(switchContext({ ws, vault: v, dailyFile: sec.file, marker: sec.marker, cli: env.cli, sid, back: ws === idx.origin }));
-      state.writeIndex(stateDir, sid, { ...state.readIndex(stateDir, sid), current: ws });
-    }
-    if (capturing(cfg, abs) && !(s.captured || []).includes(abs)) {
-      const raw = r.status === 'mapped' ? projectFor(cfg, ws, abs) : null;
-      out.push(captureLine(abs, raw ? projectName(raw) : null));
-      s.captured = [...(s.captured || []), abs];
-    }
-    state.save(v, sid, s);
+    for (const f of toolPaths(input)) touched(env, sid, path.resolve(cwd, f.path), out, f.gone);
     return out.length ? json('PostToolUse', out.join('\n')) : '';
   }
 
@@ -195,13 +202,24 @@ function readStdin() {
   }
 }
 
-if (require.main === module) {
+// Claude passes the event as an argument; Codex names it only in the stdin JSON.
+const EVENTS = { SessionStart: 'session-start', UserPromptSubmit: 'prompt', PostToolUse: 'post-tool', Stop: 'stop' };
+
+function main(argEvent) {
   let out = '';
   try {
-    if (fs.existsSync(defaultConfigPath())) out = run(process.argv[2], readStdin()).stdout;
+    if (fs.existsSync(defaultConfigPath())) {
+      const input = readStdin();
+      out = run(argEvent || (input && EVENTS[input.hook_event_name]), input).stdout;
+    } else {
+      // inert, but the host is still writing the event: leaving it unread fails the hook on large inputs
+      fs.readFileSync(0);
+    }
   } catch {}
   if (out) process.stdout.write(out);
   process.exitCode = 0;
 }
 
-module.exports = { run };
+if (require.main === module) main(process.argv[2]);
+
+module.exports = { run, main };

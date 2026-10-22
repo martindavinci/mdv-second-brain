@@ -29,7 +29,7 @@ function repo(dir, { remote, files = {} } = {}) {
 async function workspace() {
   const t = fs.mkdtempSync(join(os.tmpdir(), 'sb-boot-'));
   const code = join(t, 'code');
-  repo(join(code, 'app'), { remote: 'https://someone:s3cr3t@github.com/me/app.git', files: { 'package.json': '{"scripts":{"build":"x","test":"y"}}' } });
+  repo(join(code, 'app'), { remote: 'https://someone:s3cr3t@example.invalid/me/app.git', files: { 'package.json': '{"scripts":{"build":"x","test":"y"}}' } });
   repo(join(code, 'site-src'), { files: { 'scripts/build.js': "const out = path.resolve(ROOT, '..', 'site');\nconst old = path.resolve(ROOT, '..', 'old-name');\n" } });
   repo(join(code, 'site'));
   repo(join(code, 'tmpl'));
@@ -84,7 +84,7 @@ test('bootstrap creates the missing hubs with a generated Repo section and keeps
   assert.ok(first.json().created.includes('app'));
   const hub = read(w.hub('app'));
   assert.match(hub, /<!-- brain:repo -->\n## Repo\n[\s\S]*<!-- \/brain:repo -->\n\n<!-- brain:project-index -->/);
-  assert.match(hub, /origin https:\/\/github\.com\/me\/app\.git/);
+  assert.match(hub, /origin https:\/\/example\.invalid\/me\/app\.git/);
   assert.doesNotMatch(hub, /s3cr3t/);
   assert.match(hub, /branch main · 1 commit · last \d{4}-\d{2}-\d{2}/);
   assert.match(hub, /Working tree: clean/);

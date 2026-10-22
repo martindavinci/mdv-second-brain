@@ -39,7 +39,7 @@ Codex runs the agent's commands in a sandbox, and a plugin cannot widen it: the 
 writable_roots = ["~/Documents/SecondBrain", "~/.config/mdv-second-brain"]
 ```
 
-or start Codex with `codex --add-dir ~/Documents/SecondBrain --add-dir ~/.config/mdv-second-brain`, or use project mode (`brain init --here`), which keeps everything inside the folder.
+or start Codex with `codex --add-dir ~/Documents/SecondBrain --add-dir ~/.config/mdv-second-brain`, or use project mode (`brain init --here`), which keeps everything inside the folder. When activation fails because the sandbox cannot write the configuration (exit 8), the agent lists these ways out; on request, `brain init --config-here` keeps the configuration in the activated folder (`<folder>/.config/mdv-second-brain/`, a copy of the global settings plus the new workspace, excluded from the folder's git repo), found from any subfolder.
 
 Both hosts share the same configuration and vaults: a workspace activated in one is active in the other.
 
@@ -126,7 +126,7 @@ The board has four lanes — ToDo, In Progress, Completed, Discarded — and the
 
 | Command | What it does |
 |---|---|
-| `brain init [<ws>] [--quick] [--here] [--path] [--vault] [--git-mode] [--identity] [--language]` | activate a folder; `--here` = project mode; `--plan` prints what the guided questions need |
+| `brain init [<ws>] [--quick] [--here] [--config-here] [--path] [--vault] [--git-mode] [--identity] [--language]` | activate a folder; `--here` = project mode; `--config-here` = configuration kept in the folder; `--plan` prints what the guided questions need |
 | `brain attach <ws>` / `brain detach` | turn the brain on or off for the current chat only |
 | `brain task add "<Name>" [--project] [--feature] [--status]` | new task note + card (same subcommands for `issue`) |
 | `brain task list` · `show` · `move` · `block` · `unblock` · `done` · `discard` · `delete --yes` · `sync` | manage tasks and issues |

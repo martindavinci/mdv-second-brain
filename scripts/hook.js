@@ -178,16 +178,17 @@ function handle(event, input, env) {
 }
 
 function run(event, input, opts = {}) {
-  const { locate, isLocalFile } = require('./lib/locate');
+  const { locate, isLocalFile, samePath } = require('./lib/locate');
   const where = (input && typeof input === 'object' && input.cwd) || process.cwd();
-  const cfgFile = opts.cfgFile || locate(where, { globalFile: opts.globalFile || defaultConfigPath() });
+  const globalFile = opts.globalFile || defaultConfigPath();
+  const cfgFile = opts.cfgFile || locate(where, { globalFile });
   if (!cfgFile) return { stdout: '' };
   const configDir = path.dirname(cfgFile);
   try {
     if (!fs.existsSync(cfgFile)) return { stdout: '' };
     if (!input || typeof input !== 'object') throw new Error('bad-input: hook stdin is not a JSON object');
     // a project's own config is not where the CLI looks by default from every folder: name it in the CLI line
-    const cliConfig = isLocalFile(cfgFile) ? cfgFile : null;
+    const cliConfig = isLocalFile(cfgFile) && !samePath(cfgFile, globalFile) ? cfgFile : null;
     const env = { now: opts.now || new Date(), cli: opts.cli || DEFAULT_CLI, cliConfig, cfgFile, stateDir: path.join(configDir, 'state') };
     return { stdout: handle(event, input, env) || '' };
   } catch (e) {

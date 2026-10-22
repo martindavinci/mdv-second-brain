@@ -18,11 +18,12 @@ Outside a workspace the plugin is inert: do nothing unless the user asks to acti
   4. Git: own repo with the detected identity (show `identity.name <identity.email>`; recommended) / own repo with the global identity / no git / inside the repo that contains the vault.
   Never ask the language: use the code of the user's chat language.
   Then run `brain init <ws> --path <dir> [--vault <dir>] --git-mode per-workspace|none|host [--identity detected|global] --language <code>`.
-  For "only this project" skip questions 2–3: `brain init --here --language <code> [--git-mode per-workspace|none|host] [--identity detected|global]` (vault, config and state all in `<folder>/SecondBrain`).
+  For "only this project" skip questions 2–3: `brain init --here --language <code> [--git-mode per-workspace|none|host] [--identity detected|global]` (all in `<folder>/SecondBrain`).
   For "only this chat" never map the folder: a new workspace is `brain workspace add <ws> --language <code> [--vault <dir>]`, then `brain attach <ws>`.
 - Quick ("attiva brain con i default", `/brain init --quick` or `$second-brain init --quick`): `brain init --quick --language <code>`, no questions.
 - Off for this chat ("disattiva brain"): `brain detach`.
 Finish with the single line the CLI prints. The workspace context arrives with the next message.
+`init` exit 8 (sandbox cannot write the config): give the user the ways out it lists; `--config-here` only if they pick it.
 
 ## While you work (level 1, no commit)
 - Your daily section: update it only with `brain checkpoint --status "<where we are>" --next "<next step>" --open "<open points>" --log "<what just happened>"` (any subset; ≤ 600 chars in all). Never edit the daily file by hand: other sessions write to it too. Do it on your own at each meaningful step, so the Stop reminder stays rare.

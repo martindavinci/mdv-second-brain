@@ -10,9 +10,9 @@ const git = require('./lib/git');
 const { isInside } = require('./lib/paths');
 const { resolveWorkspace, projectFor } = require('./lib/resolve');
 const { projectName } = require('./lib/names');
-const { locate, LOCAL_VAULT } = require('./lib/locate');
+const { locate, folderConfigFile, LOCAL_VAULT } = require('./lib/locate');
 
-const BOOL = new Set(['json', 'yes', 'blocked', 'open', 'quick', 'apply', 'archive', 'plan', 'here']);
+const BOOL = new Set(['json', 'yes', 'blocked', 'open', 'quick', 'apply', 'archive', 'plan', 'here', 'config-here']);
 const GIT_MODES = ['per-workspace', 'single', 'none', 'host'];
 
 function parseArgs(argv) {
@@ -219,6 +219,14 @@ function gitSettings(flags, dir, vaultDir) {
   return g;
 }
 
+function excludeFromRepo(dir, target) {
+  try {
+    if (!git.available()) return;
+    const top = git.toplevel(dir);
+    if (top) git.excludeInParent(top, target);
+  } catch {}
+}
+
 // Project mode: config, session state and vault all live in <dir>/SecondBrain; nothing is written elsewhere.
 function cmdInitHere(env, dir, args) {
   const { flags } = env;
@@ -247,6 +255,13 @@ function cmdInit(env, args) {
     return out(env, p, JSON.stringify(p, null, 2));
   }
   if (flags.here) return cmdInitHere(env, dir, args);
+  if (flags['config-here']) {
+    // only on request (the sandbox cannot write the global config): the readable global settings come along
+    const file = folderConfigFile(dir);
+    const r = cmdInit({ ...env, cfgFile: file, flags: { ...flags, 'config-here': false } }, args);
+    excludeFromRepo(dir, path.dirname(file));
+    return r;
+  }
   const r = resolveWorkspace(cfg, dir);
   // without an explicit name a new folder gets a new workspace: never merge it into a same-named one
   let name = args[0] || (r.status === 'mapped' ? r.name : defaultName(dir));
@@ -568,7 +583,7 @@ function cmdStatus(env) {
 // Codex runs the agent's commands in a sandbox that may not reach the config folder or the vault.
 function notWritable(e) {
   if (!e || !['EPERM', 'EACCES', 'EROFS'].includes(e.code) || !e.path) return null;
-  return new CliError(8, `cannot write ${e.path} (the agent's sandbox may not reach it): approve this command to run outside the sandbox, add its folder to writable_roots in ~/.codex/config.toml, or use project mode (brain init --here) to keep everything inside the folder`);
+  return new CliError(8, `cannot write ${e.path} (the agent's sandbox may not reach it): approve this command to run outside the sandbox, add its folder to writable_roots in ~/.codex/config.toml, keep the configuration in the folder (brain init --config-here, only if the user chooses it), or use project mode (brain init --here) to keep everything inside the folder`);
 }
 
 const ERRORS = {

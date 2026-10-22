@@ -129,9 +129,58 @@ test('a sandbox that forbids writing the config gets a clear way out, not a bare
     assert.match(msg, /approve/);
     assert.match(msg, /writable_roots/);
     assert.match(msg, /init --here/);
+    assert.match(msg, /--config-here/);
   } finally {
     fs.writeFileSync = real;
   }
+});
+
+const folderConfig = (dir) => join(dir, '.config', 'mdv-second-brain', 'config.json');
+
+test('init --config-here keeps the config in the folder, copying the global one, which stays untouched', async () => {
+  const p = project();
+  const g = defaults();
+  g.root = join(p.t, 'root');
+  g.ignore = [join(p.t, 'work', 'old')];
+  saveConfig(g, p.globalFile);
+  const before = fs.readFileSync(p.globalFile, 'utf8');
+  const o = io(p.proj, { MDV_SECOND_BRAIN_CONFIG: p.globalFile });
+  assert.equal(await main(['--session', 's-fold-1', 'init', 'app', '--config-here', '--language', 'en', '--git-mode', 'none'], o), 0, o.err.join(''));
+  const saved = loadConfig(folderConfig(p.proj));
+  assert.deepEqual(saved.ignore, [join(p.t, 'work', 'old')]);
+  assert.deepEqual(saved.workspaces.app.paths, [p.proj]);
+  assert.equal(fs.readFileSync(p.globalFile, 'utf8'), before);
+  assert.ok(state.readIndex(join(p.proj, '.config', 'mdv-second-brain', 'state'), 's-fold-1'));
+  assert.match(fs.readFileSync(join(p.proj, '.git', 'info', 'exclude'), 'utf8'), /^\/\.config\/mdv-second-brain\/$/m);
+});
+
+test('the home folder\'s .config is the global config, never a folder config', () => {
+  const p = project({ repo: false });
+  const keys = ['HOME', 'USERPROFILE'];
+  const saved = keys.map((k) => process.env[k]);
+  for (const k of keys) process.env[k] = p.t;
+  try {
+    fs.mkdirSync(join(p.t, '.config', 'mdv-second-brain'), { recursive: true });
+    fs.writeFileSync(folderConfig(p.t), '{}');
+    assert.equal(findLocal(join(p.proj, 'src')), null);
+  } finally {
+    keys.forEach((k, i) => (saved[i] === undefined ? delete process.env[k] : (process.env[k] = saved[i])));
+  }
+});
+
+test('a folder config is found from subfolders by the CLI and the hooks', async () => {
+  const p = project({ repo: false });
+  const env = { MDV_SECOND_BRAIN_CONFIG: p.globalFile };
+  const vaultDir = join(p.proj, 'Notes');
+  assert.equal(await main(['--session', 's-fold-2', 'init', 'app', '--config-here', '--language', 'en', '--git-mode', 'none', '--vault', vaultDir], io(p.proj, env)), 0);
+  const sub = join(p.proj, 'src', 'deep');
+  assert.equal(findLocal(sub), folderConfig(p.proj));
+  const o = io(sub, env);
+  assert.equal(await main(['--session', 's-fold-2', 'task', 'add', 'Thing'], o), 0, o.err.join(''));
+  assert.ok(fs.readdirSync(vaultDir, { recursive: true }).some((f) => String(f).endsWith('Thing.md')));
+  assert.ok(!fs.existsSync(p.globalFile));
+  const out = run('session-start', { session_id: 's-fold-3', cwd: sub, source: 'startup' }, { globalFile: p.globalFile, cli: '/x/brain.js' }).stdout;
+  assert.ok(JSON.parse(out).hookSpecificOutput.additionalContext.includes(`--config "${folderConfig(p.proj)}"`));
 });
 
 test('workspace commands are refused in project mode', async () => {

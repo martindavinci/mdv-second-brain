@@ -1,16 +1,25 @@
 #!/usr/bin/env node
 'use strict';
+const fs = require('node:fs');
 const path = require('node:path');
 const config = require('./lib/config');
 const vault = require('./lib/vault');
 const tasks = require('./lib/tasks');
+const state = require('./lib/state');
+const git = require('./lib/git');
+const { isInside } = require('./lib/paths');
 const { resolveWorkspace, projectFor } = require('./lib/resolve');
+const { projectName } = require('./lib/names');
 
 const BOOL = new Set(['json', 'yes', 'blocked', 'open', 'quick', 'apply', 'archive', 'plan']);
+const GIT_MODES = ['per-workspace', 'single', 'none', 'host'];
 
 function parseArgs(argv) {
   const flags = {};
   const pos = [];
+  const set = (k, v) => {
+    flags[k] = k in flags ? [].concat(flags[k], v) : v;
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--') {
@@ -20,10 +29,11 @@ function parseArgs(argv) {
     if (a.startsWith('--') && a.length > 2) {
       const eq = a.indexOf('=');
       const key = eq > 0 ? a.slice(2, eq) : a.slice(2);
-      if (eq > 0) flags[key] = a.slice(eq + 1);
-      else if (BOOL.has(key) || i + 1 >= argv.length) flags[key] = true;
-      else flags[key] = argv[++i];
-    } else pos.push(a);
+      if (eq > 0) set(key, a.slice(eq + 1));
+      else if (BOOL.has(key) || i + 1 >= argv.length) set(key, true);
+      else set(key, argv[++i]);
+    } else if (a === '-m' && i + 1 < argv.length) set('m', argv[++i]);
+    else pos.push(a);
   }
   return { flags, pos };
 }
@@ -35,25 +45,49 @@ class CliError extends Error {
   }
 }
 
-function workspaceCtx(env) {
-  const { cfg, flags, cwd } = env;
-  let name = typeof flags.workspace === 'string' ? flags.workspace : null;
-  if (!name) {
-    const r = resolveWorkspace(cfg, cwd);
-    if (r.status !== 'mapped') throw new CliError(2, 'not in a workspace: run brain init');
-    name = r.name;
-  }
-  if (!cfg.workspaces[name]) throw new CliError(2, `unknown workspace: ${name}`);
+const str = (v) => (typeof v === 'string' && v !== '' ? v : Array.isArray(v) ? str(v[v.length - 1]) : undefined);
+const list = (v) => (v === undefined || v === true ? [] : [].concat(v).filter((x) => typeof x === 'string'));
+const stateDirOf = (env) => path.join(path.dirname(env.cfgFile), 'state');
+
+// A real session id, or `literal` when the skill could not substitute ${CLAUDE_SESSION_ID}.
+function sessionOf(flags) {
+  const s = str(flags.session);
+  if (!s) return {};
+  return s.includes('${') ? { literal: true } : { sid: s };
+}
+
+function languageError(name) {
+  return new CliError(4, `language-required: run: brain init ${name} --language <code>`);
+}
+
+function ensure(env, name, language) {
   try {
-    vault.ensureVault(cfg, name, { cfgFile: env.cfgFile });
+    return vault.ensureVault(env.cfg, name, { language, cfgFile: env.cfgFile });
   } catch (e) {
-    if (e.message === 'language-required') throw new CliError(4, `language-required: run: brain init ${name} --language <code>`);
+    if (e.message === 'language-required') throw languageError(name);
     throw e;
   }
+}
+
+function workspaceCtx(env) {
+  const { cfg, flags, cwd } = env;
+  let name = str(flags.workspace);
+  if (!name) {
+    const r = resolveWorkspace(cfg, cwd);
+    if (r.status === 'mapped') name = r.name;
+    else {
+      const { sid } = sessionOf(flags);
+      const idx = sid && state.readIndex(stateDirOf(env), sid);
+      if (idx && !idx.detached && idx.origin) name = idx.origin;
+    }
+    if (!name) throw new CliError(2, 'not in a workspace: run brain init');
+  }
+  if (!cfg.workspaces[name]) throw new CliError(2, `unknown workspace: ${name}`);
+  ensure(env, name);
   const v = config.vaultPathFor(cfg, name);
   return {
     name,
-    ctx: { vault: v, boardFile: path.join(v, config.boardPathFor(cfg, name)), lang: vault.languageFor(cfg, name) || 'en', sid: typeof flags.session === 'string' ? flags.session : undefined },
+    ctx: { vault: v, boardFile: path.join(v, config.boardPathFor(cfg, name)), lang: vault.languageFor(cfg, name) || 'en', sid: sessionOf(flags).sid, budgets: cfg.budgets },
   };
 }
 
@@ -68,27 +102,34 @@ function requireArg(v, what) {
   return v;
 }
 
+function cwdProject(env, ws) {
+  const explicit = str(env.flags.project);
+  if (explicit) return explicit;
+  const raw = projectFor(env.cfg, ws, env.cwd);
+  return raw ? projectName(raw) : undefined;
+}
+
 function cmdItems(env, kind, sub, args) {
   const { name: ws, ctx } = workspaceCtx(env);
   const { flags } = env;
-  const project = typeof flags.project === 'string' ? flags.project : projectFor(env.cfg, ws, env.cwd);
   const itemName = () => requireArg(args[0], 'name');
   switch (sub) {
     case 'add': {
       const title = requireArg(args.join(' '), 'title');
+      const project = cwdProject(env, ws);
       const r = kind === 'feature'
-        ? tasks.addFeature(ctx, { title, project, lifecycle: typeof flags.lifecycle === 'string' ? flags.lifecycle : undefined })
-        : tasks.addItem(ctx, kind, { title, project, feature: typeof flags.feature === 'string' ? flags.feature : undefined, status: typeof flags.status === 'string' ? flags.status : 'todo' });
+        ? tasks.addFeature(ctx, { title, project, lifecycle: str(flags.lifecycle) })
+        : tasks.addItem(ctx, kind, { title, project, feature: str(flags.feature), status: str(flags.status) || 'todo' });
       return out(env, { name: r.name, file: r.file }, `${kind} added: ${r.name} → ${rel(ctx, r.file)}`);
     }
     case 'list': {
-      if (kind === 'feature') throw new CliError(2, 'use: brain search --type feature');
-      const items = tasks.listItems(ctx, { kind, status: typeof flags.status === 'string' ? flags.status : undefined, project: typeof flags.project === 'string' ? flags.project : undefined, blocked: flags.blocked ? true : undefined });
+      if (kind === 'feature') throw new CliError(2, 'use: brain search <text> --type feature');
+      const items = tasks.listItems(ctx, { kind, status: str(flags.status), project: str(flags.project), blocked: flags.blocked ? true : undefined });
       return out(env, items, items.length ? items.map((i) => `- ${i.name} [${i.status}]${i.blocked ? ' 🔒' : ''}${i.project ? ` (${i.project})` : ''}`).join('\n') : 'nothing');
     }
     case 'show': {
-      const max = flags['max-chars'] ? Number(flags['max-chars']) : 4000;
-      const text = tasks.showItem(ctx, itemName(), { section: typeof flags.section === 'string' ? flags.section : undefined, maxChars: max > 0 ? max : 4000 });
+      const max = Number(str(flags['max-chars']) || 4000);
+      const text = tasks.showItem(ctx, itemName(), { section: str(flags.section), maxChars: max > 0 ? max : 4000 });
       return out(env, { text }, text);
     }
     case 'move': {
@@ -114,6 +155,7 @@ function cmdItems(env, kind, sub, args) {
     case 'sync': {
       const r = tasks.syncFromBoard(ctx);
       require('./lib/indexes').rebuildIndexes(ctx);
+      state.markCliWrite(ctx.vault, ctx.sid);
       return out(env, r, `synced: ${r.statusChanged} status, ${r.notesCreated} notes, ${r.cardsAdded} cards, ${r.cardsRouted} routed${r.featureCards.length ? `; cards on features (turn them into tasks): ${r.featureCards.join(', ')}` : ''}`);
     }
     default:
@@ -121,21 +163,272 @@ function cmdItems(env, kind, sub, args) {
   }
 }
 
-function cmdInit(env, args) {
-  const { cfg, flags, cwd } = env;
-  const name = requireArg(args[0], 'workspace name');
-  config.assertWorkspaceName(name);
-  if (!cfg.workspaces[name]) {
-    cfg.workspaces[name] = { paths: [cwd] };
-    config.saveConfig(cfg, env.cfgFile);
-  }
+function defaultName(dir) {
+  const n = path.basename(dir).toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^[^a-z0-9]+/, '').replace(/-+$/, '');
+  return n || 'brain';
+}
+
+function initPlan(env, dir) {
+  const { cfg } = env;
+  const r = resolveWorkspace(cfg, dir);
+  const name = defaultName(dir);
+  const parentDir = path.dirname(dir);
+  let parentHasRepos = false;
   try {
-    const r = vault.ensureVault(cfg, name, { language: typeof flags.language === 'string' ? flags.language : undefined, cfgFile: env.cfgFile });
-    return out(env, { workspace: name, vault: r.vault }, `brain active: ${name} → ${r.vault}`);
-  } catch (e) {
-    if (e.message === 'language-required') throw new CliError(4, `language-required: run: brain init ${name} --language <code>`);
-    throw e;
+    parentHasRepos = fs.readdirSync(parentDir, { withFileTypes: true }).some((e) => e.isDirectory() && fs.existsSync(path.join(parentDir, e.name, '.git')));
+  } catch {}
+  const defaultVault = path.join(cfg.root, name);
+  const id = git.detectIdentity(dir, { vaultDir: defaultVault });
+  return {
+    cwd: dir,
+    folderName: path.basename(dir),
+    parentDir,
+    parentHasRepos,
+    mapped: r.status === 'mapped' ? r.name : null,
+    workspaces: Object.keys(cfg.workspaces),
+    defaultName: name,
+    defaultVault,
+    insideVault: path.join(dir, 'SecondBrain'),
+    identity: id ? { name: id.name, email: id.email, source: id.source } : null,
+    gitAvailable: git.available(),
+  };
+}
+
+function bind(env, name, attached) {
+  const { sid, literal } = sessionOf(env.flags);
+  if (sid) state.bindSession(stateDirOf(env), sid, name, { attached, contextSent: false });
+  else if (literal) state.writePending(stateDirOf(env), env.cwd, name);
+  return !!(sid || literal);
+}
+
+function cmdInit(env, args) {
+  const { cfg, flags } = env;
+  const dir = path.resolve(env.cwd, str(flags.path) || '.');
+  if (flags.plan) {
+    const p = initPlan(env, dir);
+    return out(env, p, JSON.stringify(p, null, 2));
   }
+  const r = resolveWorkspace(cfg, dir);
+  const name = args[0] || (r.status === 'mapped' ? r.name : defaultName(dir));
+  config.assertWorkspaceName(name);
+  let ws = cfg.workspaces[name];
+  if (!ws) {
+    const mode = str(flags['git-mode']) || 'per-workspace';
+    if (!GIT_MODES.includes(mode)) throw new CliError(2, `bad --git-mode: use ${GIT_MODES.join(' | ')}`);
+    ws = { paths: [dir], git: { mode } };
+    if (str(flags.vault)) ws.vault = path.resolve(env.cwd, str(flags.vault));
+    const identity = str(flags.identity) || 'detected';
+    if (mode !== 'none' && identity === 'detected') {
+      const id = git.detectIdentity(dir, { vaultDir: ws.vault || path.join(cfg.root, name) });
+      if (id && id.source === 'gitconfig-file') ws.git.config = { 'include.path': id.includePath };
+      else if (id && id.source !== 'global') ws.git.config = { 'user.name': id.name, 'user.email': id.email };
+    }
+    cfg.workspaces[name] = ws;
+  } else if (!(ws.paths || []).some((p) => isInside(dir, p)) && !isInside(dir, config.vaultPathFor(cfg, name))) {
+    ws.paths = [...(ws.paths || []), dir];
+  }
+  if (str(flags.language) && (!ws.language || ws.language === 'auto')) ws.language = str(flags.language);
+  config.saveConfig(cfg, env.cfgFile);
+  const v = ensure(env, name, str(flags.language));
+  bind(env, name, false);
+  return out(env, { workspace: name, vault: v.vault }, `brain active: ${name} → ${v.vault}`);
+}
+
+function cmdAttach(env, args) {
+  const name = requireArg(args[0], 'workspace name');
+  if (!env.cfg.workspaces[name]) throw new CliError(2, `unknown workspace: ${name}`);
+  const v = ensure(env, name);
+  if (!sessionOf(env.flags).sid && !sessionOf(env.flags).literal) throw new CliError(2, 'attach needs --session <id>');
+  bind(env, name, true);
+  return out(env, { workspace: name, vault: v.vault }, `brain active for this chat: ${name} → ${v.vault}`);
+}
+
+function cmdDetach(env) {
+  const { sid } = sessionOf(env.flags);
+  if (!sid) throw new CliError(2, 'detach needs --session <id>');
+  state.detachSession(stateDirOf(env), sid);
+  return out(env, { detached: true }, 'brain off for this chat');
+}
+
+function cmdWorkspace(env, sub, args) {
+  const { cfg, flags } = env;
+  const save = () => config.saveConfig(cfg, env.cfgFile);
+  switch (sub) {
+    case 'add': {
+      const name = requireArg(args[0], 'workspace name');
+      config.assertWorkspaceName(name);
+      const ws = cfg.workspaces[name] || { paths: [] };
+      for (const p of list(flags.path)) if (!ws.paths.includes(path.resolve(env.cwd, p))) ws.paths.push(path.resolve(env.cwd, p));
+      if (str(flags.vault)) ws.vault = path.resolve(env.cwd, str(flags.vault));
+      if (str(flags.language)) ws.language = str(flags.language);
+      if (str(flags.board)) ws.board = str(flags.board);
+      cfg.workspaces[name] = ws;
+      save();
+      return out(env, { workspace: name }, `workspace ${name}: ${ws.paths.length} path(s)`);
+    }
+    case 'list': {
+      const rows = Object.keys(cfg.workspaces).map((n) => ({ name: n, vault: config.vaultPathFor(cfg, n) }));
+      return out(env, rows, rows.length ? rows.map((r) => `- ${r.name} → ${r.vault}`).join('\n') : 'no workspaces');
+    }
+    case 'map': {
+      const p = path.resolve(env.cwd, requireArg(args[0], 'path'));
+      const name = requireArg(args[1], 'workspace name');
+      config.assertWorkspaceName(name);
+      const ws = cfg.workspaces[name] || { paths: [] };
+      if (!ws.paths.includes(p)) ws.paths.push(p);
+      cfg.workspaces[name] = ws;
+      save();
+      return out(env, { workspace: name, path: p }, `mapped ${p} → ${name}`);
+    }
+    case 'ignore': {
+      const p = path.resolve(env.cwd, requireArg(args[0], 'path'));
+      if (!cfg.ignore.includes(p)) cfg.ignore.push(p);
+      save();
+      return out(env, { ignored: p }, `ignored ${p}`);
+    }
+    default:
+      throw new CliError(2, `unknown workspace command: ${sub || '(none)'}`);
+  }
+}
+
+function cmdSecret(env, sub, args) {
+  const secrets = require('./lib/secrets');
+  const { ctx } = workspaceCtx(env);
+  switch (sub) {
+    case 'set': {
+      const key = requireArg(args[0], 'KEY');
+      secrets.setSecret(ctx.vault, key, requireArg(args.slice(1).join(' '), 'value'));
+      return out(env, { key }, `secret set: ${key} — reference it as ${secrets.placeholder(key)}`);
+    }
+    case 'get': {
+      const key = requireArg(args[0], 'KEY');
+      const all = secrets.readSecrets(ctx.vault);
+      if (!(key in all)) throw new CliError(2, `no secret ${key}`);
+      return out(env, { key, value: all[key] }, all[key]);
+    }
+    case 'list': {
+      const keys = Object.keys(secrets.readSecrets(ctx.vault));
+      return out(env, keys, keys.length ? keys.join('\n') : 'no secrets');
+    }
+    default:
+      throw new CliError(2, `unknown secret command: ${sub || '(none)'}`);
+  }
+}
+
+function cmdIdea(env, sub, args) {
+  const ideas = require('./lib/ideas');
+  const { name: ws, ctx } = workspaceCtx(env);
+  const { flags } = env;
+  switch (sub) {
+    case 'add': {
+      const r = ideas.addIdea(ctx, requireArg(args.join(' '), 'idea text'), { project: cwdProject(env, ws) });
+      state.markCliWrite(ctx.vault, ctx.sid);
+      return out(env, r, `idea added: ${r.id}`);
+    }
+    case 'list': {
+      const items = ideas.listIdeas(ctx, { project: str(flags.project), open: !!flags.open, limit: Number(str(flags.limit) || 20) });
+      return out(env, items, items.length ? items.map((i) => `- ${i.id} [${i.state}] ${i.text}${i.project ? ` (${i.project})` : ''}`).join('\n') : 'no ideas');
+    }
+    case 'promote': {
+      const r = ideas.promoteIdea(ctx, requireArg(args[0], 'idea id'), requireArg(str(flags.to), '--to <name>'));
+      state.markCliWrite(ctx.vault, ctx.sid);
+      return out(env, r, `idea ${args[0]} → [[${flags.to}]]`);
+    }
+    case 'discard': {
+      const r = ideas.discardIdea(ctx, requireArg(args[0], 'idea id'));
+      state.markCliWrite(ctx.vault, ctx.sid);
+      return out(env, r, `idea ${args[0]} discarded`);
+    }
+    default:
+      throw new CliError(2, `unknown idea command: ${sub || '(none)'}`);
+  }
+}
+
+function cmdProject(env, sub, args) {
+  const boards = require('./lib/boards');
+  const home = require('./lib/home');
+  const { ctx } = workspaceCtx(env);
+  switch (sub) {
+    case 'list': {
+      const names = new Set([...home.hubs(ctx.vault), ...tasks.listItems(ctx, {}).map((i) => i.project).filter(Boolean)]);
+      for (const b of boards.listBoards(ctx)) if (b.project) names.add(b.project);
+      const rows = [...names].sort().map((n) => ({ name: n, split: boards.isSplit(ctx, n), hub: home.hubs(ctx.vault).includes(n) }));
+      return out(env, rows, rows.length ? rows.map((r) => `- ${r.name} — split: ${r.split ? 'yes' : 'no'}, hub: ${r.hub ? 'yes' : 'no'}`).join('\n') : 'no projects');
+    }
+    case 'split':
+    case 'merge': {
+      const p = requireArg(args[0], 'project');
+      const r = sub === 'split' ? boards.splitProject(ctx, p) : boards.mergeProject(ctx, p);
+      state.markCliWrite(ctx.vault, ctx.sid);
+      return out(env, r, `${sub} ${p}: ${r.cardsMoved} cards, ${r.ideasMoved} ideas moved`);
+    }
+    default:
+      throw new CliError(2, `unknown project command: ${sub || '(none)'}`);
+  }
+}
+
+function runIndex(env, ctx) {
+  const { cfg } = env;
+  const now = new Date();
+  const archived = tasks.archiveDone(ctx, now, cfg.archiveAfterDays);
+  const ideasArchived = require('./lib/ideas').archiveIdeas(ctx, now, cfg.archiveAfterDays);
+  const budget = require('./lib/budget');
+  const rotated = budget.rotateLogs(ctx);
+  const decisions = budget.archiveDecisions(ctx, now, cfg.archiveAfterDays);
+  const dailies = require('./lib/daily').rollover(ctx.vault, now, cfg.dailyInboxDays);
+  require('./lib/indexes').rebuildIndexes(ctx);
+  require('./lib/home').rebuildHome(ctx);
+  const oversize = budget.check(ctx);
+  fs.mkdirSync(path.join(ctx.vault, '.brain'), { recursive: true });
+  fs.writeFileSync(path.join(ctx.vault, '.brain', 'oversize.json'), JSON.stringify(oversize, null, 2) + '\n');
+  state.markCliWrite(ctx.vault, ctx.sid);
+  return { archived: archived.length, ideasArchived, rotated, decisions, dailies: dailies.length, oversize };
+}
+
+function cmdIndex(env) {
+  const { ctx } = workspaceCtx(env);
+  const r = runIndex(env, ctx);
+  return out(env, r, `index: ${r.archived} cards archived, ${r.ideasArchived} ideas archived, ${r.rotated} logs rotated, ${r.decisions} decisions archived, ${r.dailies} dailies archived${r.oversize.length ? `; oversize: ${r.oversize.map((o) => o.file).join(', ')}` : ''}`);
+}
+
+function cmdCommit(env) {
+  const secrets = require('./lib/secrets');
+  const { name, ctx } = workspaceCtx(env);
+  runIndex(env, ctx);
+  const repo = vault.repoFor(env.cfg, name, ctx.vault);
+  if (!repo) return out(env, { committed: false, reason: 'git-disabled' }, 'git disabled');
+  if (!git.available()) return out(env, { committed: false, reason: 'git-unavailable' }, 'git unavailable');
+  const hits = secrets.scanChanged(repo.repo, repo.pathspec);
+  if (hits.length) throw new CliError(5, hits.map((h) => `secrets found: ${h.file}:${h.line} (${h.kind}) — move to secrets.local.md`).join('\n'));
+  vault.applyGitConfig(env.cfg, name, repo.repo);
+  const msg = requireArg(str(env.flags.m) || str(env.flags.message), '-m <message>');
+  const r = git.commitPath(repo.repo, repo.pathspec, msg.startsWith('brain:') ? msg : `brain: ${msg}`);
+  return out(env, r, r.committed ? 'committed' : r.reason === 'no-changes' ? 'nothing to commit' : 'git unavailable');
+}
+
+function cmdContext(env) {
+  const { name: ws, ctx } = workspaceCtx(env);
+  const text = require('./lib/retrieve').context(ctx, cwdProject(env, ws));
+  return out(env, { text }, text);
+}
+
+function cmdSearch(env, args) {
+  const { ctx } = workspaceCtx(env);
+  const { flags } = env;
+  const hits = require('./lib/retrieve').search(ctx, requireArg(args.join(' '), 'search text'), {
+    project: str(flags.project), type: str(flags.type), limit: Number(str(flags.limit) || 10), archive: !!flags.archive,
+  });
+  return out(env, hits, hits.length ? hits.map((h) => `- ${h.name} (${h.path})${h.heading ? ` § ${h.heading}` : ''} — ${h.snippet}`).join('\n') : 'no results');
+}
+
+function cmdStatus(env) {
+  const { name, ctx } = workspaceCtx(env);
+  const items = tasks.listItems(ctx, {});
+  const count = (s) => items.filter((i) => i.status === s).length;
+  const bugs = items.filter((i) => i.kind === 'issue' && i.status !== 'completed' && i.status !== 'discarded').length;
+  const openIdeas = require('./lib/ideas').listIdeas(ctx, { open: true, limit: 0 }).length;
+  const s = { workspace: name, vault: ctx.vault, language: ctx.lang, git: vault.gitModeFor(env.cfg, name), todo: count('todo'), inProgress: count('in-progress'), completed: count('completed'), bugs, ideas: openIdeas };
+  return out(env, s, `workspace ${name} → ${ctx.vault} (${ctx.lang}, git ${s.git})\nToDo ${s.todo} · In Progress ${s.inProgress} · Completed ${s.completed} · open bugs ${bugs} · open ideas ${openIdeas}`);
 }
 
 const ERRORS = {
@@ -146,31 +439,73 @@ const ERRORS = {
   'bad-kind': () => new CliError(2, 'bad kind'),
   'empty-title': () => new CliError(2, 'empty title'),
   'invalid-workspace-name': () => new CliError(2, 'invalid workspace name: letters, digits, - and _'),
+  'invalid-secret-key': () => new CliError(2, 'invalid secret key: use UPPER_SNAKE_CASE'),
+  'reserved-name': () => new CliError(2, 'reserved or empty project name'),
+  'already-split': () => new CliError(2, 'project already split'),
+  'not-split': () => new CliError(2, 'project is not split'),
   'invalid-config': () => new CliError(2, `invalid config file: ${config.configPath()}`),
 };
+
+const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|context|search|project|workspace|secret|index|commit|status> …';
 
 async function main(argv, io = {}) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const cwd = io.cwd || process.cwd();
   const { flags, pos } = parseArgs(argv);
-  const cfgFile = typeof flags.config === 'string' ? flags.config : config.configPath();
+  const cfgFile = str(flags.config) || config.configPath();
   try {
     const cfg = config.loadConfig(cfgFile);
     const env = { cfg, cfgFile, flags, cwd, stdout, stderr };
     const [cmd, sub, ...rest] = pos;
+    const args = [sub, ...rest].filter((x) => x !== undefined);
     switch (cmd) {
       case 'task':
       case 'issue':
       case 'feature':
         cmdItems(env, cmd, sub, rest);
-        return 0;
+        break;
       case 'init':
-        cmdInit(env, [sub, ...rest].filter((x) => x !== undefined));
-        return 0;
+        cmdInit(env, args);
+        break;
+      case 'attach':
+        cmdAttach(env, args);
+        break;
+      case 'detach':
+        cmdDetach(env);
+        break;
+      case 'workspace':
+        cmdWorkspace(env, sub, rest);
+        break;
+      case 'secret':
+        cmdSecret(env, sub, rest);
+        break;
+      case 'idea':
+        cmdIdea(env, sub, rest);
+        break;
+      case 'project':
+        cmdProject(env, sub, rest);
+        break;
+      case 'context':
+        cmdContext(env);
+        break;
+      case 'search':
+        cmdSearch(env, args);
+        break;
+      case 'index':
+        cmdIndex(env);
+        break;
+      case 'commit':
+        cmdCommit(env);
+        break;
+      case 'status':
+      case undefined:
+        cmdStatus(env);
+        break;
       default:
-        throw new CliError(2, `usage: brain <task|issue|feature|init> … (got: ${cmd || 'nothing'})`);
+        throw new CliError(2, USAGE);
     }
+    return 0;
   } catch (e) {
     const err = e instanceof CliError ? e : ERRORS[e.message] ? ERRORS[e.message](e) : null;
     if (!err) {
@@ -188,4 +523,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { main, parseArgs, CliError, workspaceCtx, out, requireArg, ERRORS };
+module.exports = { main, parseArgs, CliError, workspaceCtx, defaultName, initPlan, USAGE };

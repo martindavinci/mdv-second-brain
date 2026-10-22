@@ -81,4 +81,57 @@ function moveFile(src, dest) {
   return dest;
 }
 
-module.exports = { run, available, toplevel, init, excludeInParent, commitPath, moveFile };
+function tryRun(cwd, args) {
+  try {
+    return run(cwd, args) || null;
+  } catch {
+    return null;
+  }
+}
+
+// Identity set at repo level (local config or a local include), ignoring the global one.
+function localIdentity(dir) {
+  const scoped = (key) => {
+    const out = tryRun(dir, ['config', '--show-scope', '--get', key]);
+    if (!out) return null;
+    const [scope, ...value] = out.split('\t');
+    return scope === 'local' || scope === 'worktree' ? value.join('\t') : null;
+  };
+  const name = scoped('user.name');
+  const email = scoped('user.email');
+  return name && email ? { name, email } : null;
+}
+
+function detectIdentity(dir, { vaultDir, home = require('node:os').homedir() } = {}) {
+  if (!available()) return null;
+  const start = existingDir(dir);
+  if (!start) return null;
+  if (toplevel(start)) {
+    const id = localIdentity(start);
+    if (id) return { ...id, source: 'repo' };
+  }
+  const { normalize } = require('./paths');
+  for (let d = start; normalize(d) !== normalize(home); d = path.dirname(d)) {
+    const file = path.join(d, '.gitconfig');
+    if (fs.existsSync(file)) {
+      const name = tryRun(d, ['config', '-f', file, '--get', 'user.name']);
+      const email = tryRun(d, ['config', '-f', file, '--get', 'user.email']);
+      if (name && email) {
+        const includePath = vaultDir ? path.relative(path.join(vaultDir, '.git'), file).replace(/\\/g, '/') : file;
+        return { name, email, source: 'gitconfig-file', includePath, file };
+      }
+    }
+    if (path.dirname(d) === d) break;
+  }
+  let children = [];
+  try {
+    children = fs.readdirSync(start, { withFileTypes: true }).filter((e) => e.isDirectory() && fs.existsSync(path.join(start, e.name, '.git')));
+  } catch {}
+  const ids = children.map((e) => localIdentity(path.join(start, e.name))).filter(Boolean);
+  if (ids.length && ids.length === children.length && ids.every((i) => i.email === ids[0].email && i.name === ids[0].name)) return { ...ids[0], source: 'children' };
+  const name = tryRun(start, ['config', '--global', '--get', 'user.name']);
+  const email = tryRun(start, ['config', '--global', '--get', 'user.email']);
+  return name && email ? { name, email, source: 'global' } : null;
+}
+
+module.exports = { run, available, toplevel, init, excludeInParent, commitPath, moveFile, detectIdentity, localIdentity };

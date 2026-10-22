@@ -1,0 +1,83 @@
+'use strict';
+// Secret values live only in secrets.local.md (gitignored); notes use {{secret:KEY}}.
+const fs = require('node:fs');
+const path = require('node:path');
+const git = require('./git');
+
+const FILE = 'secrets.local.md';
+const KEY = /^[A-Z][A-Z0-9_]*$/;
+const PATTERNS = [
+  ['private-key', /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
+  ['aws-key', /\bAKIA[0-9A-Z]{16}\b/],
+  ['github-token', /\b(gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})\b/],
+  ['api-key', /\bsk-[A-Za-z0-9_-]{16,}/],
+  ['slack-token', /\bxox[abprs]-[A-Za-z0-9-]{10,}/],
+  ['assignment', /(password|passwd|secret|api[_-]?key|token)\s*[:=]\s*\S{6,}/i],
+];
+
+function scan(text) {
+  const hits = [];
+  String(text).split('\n').forEach((raw, i) => {
+    const line = raw.replace(/\{\{secret:[A-Z0-9_]+\}\}/g, '');
+    const found = PATTERNS.find(([, re]) => re.test(line));
+    if (found) hits.push({ line: i + 1, kind: found[0] });
+  });
+  return hits;
+}
+
+function changedFiles(repo, pathspec) {
+  const out = git.run(repo, ['status', '--porcelain', '-z', '--untracked-files=all', '--', pathspec]);
+  const parts = out.split('\0').filter(Boolean);
+  const files = [];
+  for (let i = 0; i < parts.length; i++) {
+    const status = parts[i].slice(0, 2);
+    const file = parts[i].slice(3);
+    if (status.startsWith('R') || status.startsWith('C')) i++;
+    if (status.includes('D')) continue;
+    files.push(file);
+  }
+  return files;
+}
+
+function scanChanged(repo, pathspec) {
+  const hits = [];
+  for (const file of changedFiles(repo, pathspec)) {
+    if (file.endsWith('.local.md')) continue;
+    const full = path.join(repo, file);
+    let text;
+    try {
+      if (!fs.statSync(full).isFile()) continue;
+      text = fs.readFileSync(full, 'utf8');
+    } catch {
+      continue;
+    }
+    if (text.includes('\0')) continue;
+    for (const h of scan(text)) hits.push({ file, ...h });
+  }
+  return hits;
+}
+
+function readSecrets(vault) {
+  const file = path.join(vault, FILE);
+  if (!fs.existsSync(file)) return {};
+  const m = /```env\n([\s\S]*?)```/.exec(fs.readFileSync(file, 'utf8'));
+  const out = {};
+  for (const line of (m ? m[1] : '').split('\n')) {
+    const kv = /^([A-Z][A-Z0-9_]*)=(.*)$/.exec(line);
+    if (kv) out[kv[1]] = kv[2];
+  }
+  return out;
+}
+
+function setSecret(vault, key, value) {
+  if (!KEY.test(key)) throw new Error('invalid-secret-key');
+  const file = path.join(vault, FILE);
+  const all = { ...readSecrets(vault), [key]: String(value) };
+  const block = '```env\n' + Object.entries(all).map(([k, v]) => `${k}=${v}`).join('\n') + '\n```';
+  const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '# Secrets\n\nLocal only, never committed. Notes reference these values as `{{secret:KEY}}`.\n\n```env\n```\n';
+  fs.writeFileSync(file, /```env\n[\s\S]*?```/.test(text) ? text.replace(/```env\n[\s\S]*?```/, block) : `${text.replace(/\n*$/, '\n\n')}${block}\n`);
+}
+
+const placeholder = (key) => `{{secret:${key}}}`;
+
+module.exports = { FILE, scan, scanChanged, readSecrets, setSecret, placeholder };

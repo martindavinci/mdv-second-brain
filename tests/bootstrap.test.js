@@ -131,6 +131,53 @@ test('prose and test fixtures never count as broken references', async () => {
   assert.deepEqual(plan.broken.filter((b) => b.project === 'docs-heavy'), []);
 });
 
+test('the same repo name under two folders of the workspace gets one hub; the other is reported', async () => {
+  const t = fs.mkdtempSync(join(os.tmpdir(), 'sb-boot-dup-'));
+  const [a, b] = [join(t, 'a'), join(t, 'b')];
+  repo(join(a, 'shared'));
+  repo(join(b, 'shared'));
+  const cfgFile = join(t, 'cfg', 'config.json');
+  const cfg = defaults();
+  cfg.root = join(t, 'root');
+  cfg.workspaces.w = { paths: [a, b], language: 'en', git: { mode: 'none' } };
+  saveConfig(cfg, cfgFile);
+  const o = { cwd: a, env: { MDV_SECOND_BRAIN_CONFIG: cfgFile }, ...io() };
+  assert.equal(await main(['--session', 's-dup', '--json', 'bootstrap'], o), 0, o.errText());
+  const r = JSON.parse(o.text());
+  assert.deepEqual(r.created, ['shared']);
+  assert.deepEqual(r.repos.map((x) => x.status).sort(), ['name-taken', 'new']);
+});
+
+test('a repo git cannot read keeps its Repo section and record instead of looking empty', async () => {
+  const w = await workspace();
+  assert.equal((await w.brain('bootstrap')).code, 0);
+  const before = read(w.hub('app'));
+  const record = read(join(w.vault, '.brain', 'repos.json'));
+  process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER = '1';
+  let r;
+  try {
+    r = await w.brain('--json', 'bootstrap');
+  } finally {
+    delete process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER;
+  }
+  assert.equal(r.code, 0, r.err);
+  assert.equal(r.json().repos.find((x) => x.project === 'app').status, 'unreadable');
+  assert.equal(read(w.hub('app')), before);
+  assert.equal(read(join(w.vault, '.brain', 'repos.json')), record);
+});
+
+test('remote URLs: a password with @ is stripped whole, a local path with spaces stays one remote', async () => {
+  const w = await workspace();
+  const dir = join(w.code, 'odd');
+  repo(dir);
+  g(dir, ['remote', 'add', 'origin', 'https://me:p@ss@example.invalid/odd.git']);
+  repo(join(w.code, 'tmpl dir'));
+  g(dir, ['remote', 'add', 'template', join(w.code, 'tmpl dir')]);
+  const plan = (await w.brain('--json', 'bootstrap', '--dry-run')).json();
+  const remotes = plan.repos.find((x) => x.project === 'odd').facts.remotes;
+  assert.deepEqual(remotes.map((x) => [x.name, x.url]), [['origin', 'https://example.invalid/odd.git'], ['template', '../tmpl dir']]);
+});
+
 test('brain status counts repos without a hub and hubs whose repo folder is gone', async () => {
   const w = await workspace();
   assert.match((await w.brain('status')).text, /repos: 5 without hub · 0 hubs without their repo folder → brain bootstrap --dry-run/);

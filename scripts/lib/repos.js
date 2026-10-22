@@ -64,11 +64,14 @@ function tryGit(dir, args) {
   }
 }
 
-// Remote URLs without credentials; a remote that is a folder next to the repo becomes ../<folder>.
+// Remote URLs without credentials (up to the last @ before the path: passwords may hold an @); a remote that is a
+// folder next to the repo becomes ../<folder>.
 function cleanRemote(url, dir, base) {
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url) && !/^file:/i.test(url)) return { url: url.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^@/]*@/i, '$1') };
-  if (/^[^/\\@]+@[^:/\\]+:/.test(url) && !/^[A-Za-z]:[\\/]/.test(url)) return { url };
-  const abs = path.resolve(dir, url.replace(/^file:\/\/\/?/i, ''));
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url) && !/^file:/i.test(url)) return { url: url.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/]*@/i, '$1') };
+  // scp-like, with or without user@ (an ssh alias): never a local path, unless it is a drive letter
+  if (/^[^/\\]+:/.test(url) && !/^[A-Za-z]:[\\/]/.test(url) && !/^file:/i.test(url)) return { url };
+  const local = url.replace(/^file:\/\//i, '').replace(/^\/([A-Za-z]:)/, '$1');
+  const abs = path.resolve(dir, local);
   if (path.dirname(abs).toLowerCase() === path.resolve(base).toLowerCase()) return { url: `../${path.basename(abs)}`, local: path.basename(abs) };
   const home = os.homedir();
   return { url: isInside(abs, home) ? `~/${path.relative(home, abs).replace(/\\/g, '/')}` : abs.replace(/\\/g, '/') };
@@ -88,11 +91,13 @@ function manifests(dir) {
   return { files, scripts };
 }
 
+// null when git cannot read the repo (another account owns it, a broken .git): never mistaken for an empty repo.
 function facts(r) {
   const run = (args) => tryGit(r.dir, args);
+  if (!run(['rev-parse', '--git-dir'])) return null;
   const remotes = [];
   for (const line of (run(['remote', '-v']) || '').split('\n')) {
-    const m = /^(\S+)\s+(\S+)\s+\(fetch\)$/.exec(line.trim());
+    const m = /^([^\t]+)\t(.+) \(fetch\)$/.exec(line.trim());
     if (m) remotes.push({ name: m[1], ...cleanRemote(m[2], r.dir, r.base) });
   }
   const commits = Number(run(['rev-list', '--count', 'HEAD'])) || 0;
@@ -102,7 +107,8 @@ function facts(r) {
     commits,
     last: commits ? run(['log', '-1', '--format=%cs']) : null,
     tag: commits ? run(['describe', '--tags', '--abbrev=0']) : null,
-    dirty: !!run(['status', '--porcelain']),
+    // no index.lock: the user may be committing in that repo right now
+    dirty: !!run(['--no-optional-locks', 'status', '--porcelain']),
     root: commits ? (run(['rev-list', '--max-parents=0', 'HEAD']) || '').split('\n')[0] || null : null,
     manifests: manifests(r.dir),
   };
@@ -255,10 +261,17 @@ function candidates(vault, live) {
   return out;
 }
 
+// Recorded repos whose hub is still there but whose folder is not: neither the recorded folder nor a folder that
+// maps to the same project (the record keeps the old folder name until the next real run, e.g. after a rename).
+function goneRecords(vault, record, repos) {
+  const folders = new Set(repos.map((r) => r.folder.toLowerCase()));
+  const named = new Set(repos.map((r) => r.project.toLowerCase()));
+  return Object.entries(record).filter(([p, rec]) => projects.findHub(vault, p) && !folders.has(String(rec.folder).toLowerCase()) && !named.has(p.toLowerCase()));
+}
+
 // Hubs a previous run recorded as repos whose folder is gone: matched to a new folder by first commit or remote.
 function renames(vault, record, repos) {
-  const present = new Set(repos.map((r) => r.folder.toLowerCase()));
-  const gone = Object.entries(record).filter(([p, rec]) => projects.findHub(vault, p) && !present.has(String(rec.folder).toLowerCase()));
+  const gone = goneRecords(vault, record, repos);
   const proposals = [];
   const orphans = [];
   for (const [p, rec] of gone) {
@@ -283,16 +296,30 @@ function plan(cfg, ws, ctx) {
     if (taken) return { ...r, status: 'name-taken', takenBy: path.relative(ctx.vault, taken).replace(/\\/g, '/') };
     return { ...r, status: 'new' };
   });
+  // one hub per name: a second repo with the same name (another folder of the workspace, or a name that only
+  // differs by case) is reported, never merged into the first one's hub
+  const claimed = new Map();
+  for (const r of repos) {
+    if (r.status !== 'new' && r.status !== 'existing') continue;
+    const key = r.project.toLowerCase();
+    if (claimed.has(key)) Object.assign(r, { status: 'name-taken', takenBy: `the repo ${claimed.get(key)}` });
+    else claimed.set(key, `${path.basename(r.base)}/${r.folder}`);
+  }
   const live = repos.filter((r) => r.status !== 'excluded');
   const broken = [];
   for (const r of live) {
     r.facts = facts(r);
+    if (!r.facts) {
+      r.status = 'unreadable';
+      continue;
+    }
     const s = siblingRefs(r);
     r.refs = s.refs;
     broken.push(...s.broken);
   }
+  const readable = live.filter((r) => r.facts);
   const { proposals, orphans } = renames(ctx.vault, readRecord(ctx.vault), live);
-  return { repos, renames: proposals, orphans, candidates: candidates(ctx.vault, live.filter((r) => r.status !== 'name-taken')), broken };
+  return { repos, renames: proposals, orphans, candidates: candidates(ctx.vault, readable.filter((r) => r.status !== 'name-taken')), broken };
 }
 
 // New hubs, every hub's Repo section regenerated, the record refreshed. A folder waiting for a rename stays out.
@@ -328,6 +355,7 @@ function describe(p, { dryRun }) {
     else if (r.status === 'excluded') lines.push(`- ${r.folder} — excluded (${r.reason})`);
     else if (r.status === 'name-taken') lines.push(`! ${r.project} — name taken by ${r.takenBy}: no hub`);
     else if (r.status === 'renamed') lines.push(`? ${r.project} — looks like ${r.from} renamed`);
+    else if (r.status === 'unreadable') lines.push(`! ${r.project} — git cannot read it (owned by another account?): hub and record left as they are`);
   }
   for (const x of p.renames) lines.push(`rename? ${x.from} → ${x.to} (same ${x.by}) — after the user confirms: brain project rename "${x.from}" "${x.to}"`);
   for (const o of p.orphans) lines.push(`orphan: ${o} — hub without its repo folder`);
@@ -342,9 +370,8 @@ function quickCheck(cfg, ws, vault) {
   const tasks = require('./tasks');
   const repos = discover(cfg, ws, vault).filter((r) => !r.reason);
   const hubs = projects.projectsWithHub(vault).map((p) => p.toLowerCase());
-  const folders = new Set(repos.map((r) => r.folder.toLowerCase()));
   const withoutHub = repos.filter((r) => !hubs.includes(r.project.toLowerCase()) && !tasks.findNote(vault, r.project)).length;
-  const orphans = Object.entries(readRecord(vault)).filter(([p, rec]) => projects.findHub(vault, p) && !folders.has(String(rec.folder).toLowerCase())).length;
+  const orphans = goneRecords(vault, readRecord(vault), repos).length;
   return { withoutHub, orphans };
 }
 

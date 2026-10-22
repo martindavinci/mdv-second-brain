@@ -262,7 +262,7 @@ test('F13 SessionStart prints nothing when Node is missing; M4 malformed stdin i
   const t = fs.mkdtempSync(join(os.tmpdir(), 'sb-m4-'));
   const cfgFile = join(t, 'config.json');
   saveConfig(defaults(), cfgFile);
-  const r = require('node:child_process').spawnSync(process.execPath, [join(__dirname, '..', 'scripts', 'hook.js'), 'prompt'], { input: 'not json', env: { ...process.env, MDV_SECOND_BRAIN_CONFIG: cfgFile }, encoding: 'utf8' });
+  const r = require('node:child_process').spawnSync(process.execPath, [join(__dirname, '..', 'scripts', 'hook.js'), 'prompt'], { cwd: t, input: 'not json', env: { ...process.env, MDV_SECOND_BRAIN_CONFIG: cfgFile }, encoding: 'utf8' });
   assert.equal(r.stdout, '');
   assert.match(read(join(t, 'error.log')), /bad-input/);
 });

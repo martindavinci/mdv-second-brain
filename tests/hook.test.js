@@ -217,7 +217,8 @@ test('resume keeps startedAt and daily file', () => {
 });
 
 function spawnHook(event, stdin, cfgFile) {
-  return spawnSync(process.execPath, [HOOK, event], { input: stdin, env: { ...process.env, MDV_SECOND_BRAIN_CONFIG: cfgFile }, encoding: 'utf8' });
+  // cwd outside any folder that keeps its own config, wherever the suite runs
+  return spawnSync(process.execPath, [HOOK, event], { cwd: os.tmpdir(), input: stdin, env: { ...process.env, MDV_SECOND_BRAIN_CONFIG: cfgFile }, encoding: 'utf8' });
 }
 
 test('no config file: hook exits silently and fast', () => {

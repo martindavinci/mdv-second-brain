@@ -118,6 +118,15 @@ test('bootstrap proposes relations with their evidence and reports broken siblin
   assert.ok(!later.candidates.some((c) => c.a === 'site-src' && c.b === 'site'));
 });
 
+test('brain status counts repos without a hub and hubs whose repo folder is gone', async () => {
+  const w = await workspace();
+  assert.match((await w.brain('status')).text, /repos: 5 without hub · 0 hubs without their repo folder → brain bootstrap --dry-run/);
+  await w.brain('bootstrap');
+  assert.doesNotMatch((await w.brain('status')).text, /repos:/);
+  fs.rmSync(join(w.code, 'tmpl'), { recursive: true, force: true });
+  assert.match((await w.brain('status')).text, /repos: 0 without hub · 1 hubs without their repo folder/);
+});
+
 test('bootstrap is refused in project mode', async () => {
   const t = fs.mkdtempSync(join(os.tmpdir(), 'sb-boot-local-'));
   const proj = join(t, 'app');

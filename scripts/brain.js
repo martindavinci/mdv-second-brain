@@ -616,7 +616,12 @@ function cmdStatus(env) {
   const bugs = items.filter((i) => i.kind === 'issue' && i.status !== 'completed' && i.status !== 'discarded').length;
   const openIdeas = require('./lib/ideas').listIdeas(ctx, { open: true, limit: 0 }).length;
   const s = { workspace: name, vault: ctx.vault, language: ctx.lang, git: vault.gitModeFor(env.cfg, name), todo: count('todo'), inProgress: count('in-progress'), completed: count('completed'), bugs, ideas: openIdeas };
-  return out(env, s, `workspace ${name} → ${ctx.vault} (${ctx.lang}, git ${s.git})\nToDo ${s.todo} · In Progress ${s.inProgress} · Completed ${s.completed} · open bugs ${bugs} · open ideas ${openIdeas}`);
+  const lines = [`workspace ${name} → ${ctx.vault} (${ctx.lang}, git ${s.git})`, `ToDo ${s.todo} · In Progress ${s.inProgress} · Completed ${s.completed} · open bugs ${bugs} · open ideas ${openIdeas}`];
+  if (!env.cfg.local) {
+    s.repos = require('./lib/repos').quickCheck(env.cfg, name, ctx.vault);
+    if (s.repos.withoutHub || s.repos.orphans) lines.push(`repos: ${s.repos.withoutHub} without hub · ${s.repos.orphans} hubs without their repo folder → brain bootstrap --dry-run`);
+  }
+  return out(env, s, lines.join('\n'));
 }
 
 // Codex runs the agent's commands in a sandbox that may not reach the config folder or the vault.

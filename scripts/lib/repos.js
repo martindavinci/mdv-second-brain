@@ -333,12 +333,14 @@ function describe(p, { dryRun }) {
   return lines.join('\n');
 }
 
-// For `brain status`: no git, only folders, hubs and the record.
+// For `brain status`: no git, only folders, hubs and the record. A repo whose name another note took never gets a
+// hub, so it is not counted.
 function quickCheck(cfg, ws, vault) {
+  const tasks = require('./tasks');
   const repos = discover(cfg, ws, vault).filter((r) => !r.reason);
   const hubs = projects.projectsWithHub(vault).map((p) => p.toLowerCase());
   const folders = new Set(repos.map((r) => r.folder.toLowerCase()));
-  const withoutHub = repos.filter((r) => !hubs.includes(r.project.toLowerCase())).length;
+  const withoutHub = repos.filter((r) => !hubs.includes(r.project.toLowerCase()) && !tasks.findNote(vault, r.project)).length;
   const orphans = Object.entries(readRecord(vault)).filter(([p, rec]) => projects.findHub(vault, p) && !folders.has(String(rec.folder).toLowerCase())).length;
   return { withoutHub, orphans };
 }

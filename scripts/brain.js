@@ -421,6 +421,15 @@ function cmdProject(env, sub, args) {
       const side = `${r.a} ${rel} ${r.b}, ${r.b} ${projects.RELATIONS[rel]} ${r.a}`;
       return out(env, r, r.changed ? `${r.removed ? 'removed' : 'related'}: ${side}` : `unchanged: ${side}`);
     }
+    case 'rename': {
+      const rename = require('./lib/rename');
+      const p = rename.planRename(ctx, requireArg(args[0], 'project'), requireArg(args[1], 'new name'));
+      if (env.flags['dry-run']) return out(env, p, [`rename ${p.from} → ${p.to} (dry run):`, ...p.moves.map((m) => `- ${m.from} → ${m.to}`), 'then links, project fields and idea headings follow'].join('\n'));
+      const r = rename.applyRename(ctx, p);
+      runIndex(env, ctx);
+      state.markCliWrite(ctx.vault, ctx.sid);
+      return out(env, r, `renamed ${r.from} → ${r.to}: ${r.moved} files moved, links updated in ${r.linksRewritten} notes`);
+    }
     case 'split':
     case 'merge': {
       const p = requireArg(args[0], 'project');
@@ -626,6 +635,7 @@ const ERRORS = {
   'invalid-workspace-name': () => new CliError(2, 'invalid workspace name: letters, digits, - and _'),
   'invalid-secret-key': () => new CliError(2, 'invalid secret key: use UPPER_SNAKE_CASE'),
   'reserved-name': () => new CliError(2, 'reserved or empty project name'),
+  'unknown-project': (e) => new CliError(2, `unknown project: ${e.project}`),
   'no-hub': (e) => new CliError(2, `no hub for project ${e.project}: brain project add ${e.project}`),
   'bad-relation': () => new CliError(2, 'a relation links two different projects: --depends-on | --used-by | --source-of | --built-from | --related'),
   'already-split': () => new CliError(2, 'project already split'),

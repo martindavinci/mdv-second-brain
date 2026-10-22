@@ -7,7 +7,25 @@ const { emptyBoard } = require('./board');
 const { normalize, isInside } = require('./paths');
 const { vaultPathFor, boardPathFor, saveConfig } = require('./config');
 
-const GITIGNORE = ['.brain/', '*.local.md', '.obsidian/workspace*.json', '.obsidian/cache', '.trash/', '.DS_Store', 'Thumbs.db'].join('\n') + '\n';
+const GITIGNORE = [
+  '# Second brain: session state and private notes',
+  '.brain/',
+  '*.local.md',
+  '',
+  '# Obsidian local state (machine/user specific)',
+  '.obsidian/workspace.json',
+  '.obsidian/workspace-mobile.json',
+  '.obsidian/cache/',
+  '.obsidian/.trash/',
+  '.trash/',
+  '',
+  '# Plugin local data (often noisy/user-specific)',
+  '.obsidian/plugins/*/data.json',
+  '',
+  '# OS files',
+  '.DS_Store',
+  'Thumbs.db',
+].join('\n') + '\n';
 
 const GITATTRIBUTES = [
   '* text=auto eol=lf',
@@ -35,12 +53,13 @@ function writeIfMissing(file, content) {
   return true;
 }
 
-// An existing .gitignore (adopted vault, custom folder) keeps its lines and gains the ones secrets rely on.
+// An existing .gitignore (adopted vault, custom folder) keeps its lines and gains the missing rules, without the
+// comments that group them in a new vault.
 function ensureGitignore(file) {
   if (writeIfMissing(file, GITIGNORE)) return;
   const text = fs.readFileSync(file, 'utf8');
   const have = new Set(text.split(/\r?\n/).map((l) => l.trim()));
-  const missing = GITIGNORE.trim().split('\n').filter((l) => !have.has(l));
+  const missing = GITIGNORE.split('\n').filter((l) => l && !l.startsWith('#') && !have.has(l));
   if (missing.length) fs.writeFileSync(file, text + (text && !text.endsWith('\n') ? '\n' : '') + missing.join('\n') + '\n');
 }
 

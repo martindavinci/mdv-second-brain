@@ -7,7 +7,7 @@ const { join } = require('node:path');
 const { execFileSync } = require('node:child_process');
 const vault = require('../scripts/lib/vault');
 const git = require('../scripts/lib/git');
-const { defaults, loadConfig, saveConfig } = require('../scripts/lib/config');
+const { defaults, loadConfig, saveConfig, vaultPathFor } = require('../scripts/lib/config');
 
 const read = (f) => fs.readFileSync(f, 'utf8');
 const hasGit = git.available();
@@ -40,6 +40,35 @@ test('ensureVault creates spec layout and fixes language', () => {
   assert.equal(loadConfig(cfgFile).workspaces.w.language, 'it');
   assert.equal(vault.languageFor(loadConfig(cfgFile), 'w'), 'it');
   assert.equal(vault.ensureVault(loadConfig(cfgFile), 'w', {}).created, false);
+});
+
+test('the vault .gitignore keeps Obsidian local state and plugin data out of git', { skip: !hasGit }, () => {
+  const { cfg, cfgFile } = setup({ git: { mode: 'per-workspace' } });
+  const r = vault.ensureVault(cfg, 'w', { language: 'en', cfgFile });
+  const ignored = (f) => {
+    try {
+      execFileSync('git', ['check-ignore', '-q', '--no-index', f], { cwd: r.vault, stdio: 'ignore' });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const local = ['.obsidian/workspace.json', '.obsidian/workspace-mobile.json', '.obsidian/cache/x', '.obsidian/.trash/a.md', '.trash/a.md', '.obsidian/plugins/obsidian-kanban/data.json', 'a.local.md', '.brain/state/s.json'];
+  for (const f of local) assert.ok(ignored(f), f);
+  for (const f of ['.obsidian/app.json', '.obsidian/plugins/obsidian-kanban/main.js', '00_Inbox/Plan.md']) assert.ok(!ignored(f), f);
+});
+
+test('an existing .gitignore gains the missing rules, never the comments', () => {
+  const { cfg, cfgFile } = setup({ git: { mode: 'none' } });
+  const v = vaultPathFor(cfg, 'w');
+  fs.mkdirSync(v, { recursive: true });
+  fs.writeFileSync(join(v, '.gitignore'), '.obsidian/\n');
+  vault.ensureVault(cfg, 'w', { language: 'en', cfgFile });
+  const text = read(join(v, '.gitignore'));
+  assert.match(text, /^\.obsidian\/\n/);
+  assert.match(text, /^\.obsidian\/plugins\/\*\/data\.json$/m);
+  assert.doesNotMatch(text, /^#/m);
+  assert.doesNotMatch(text, /\n\n/);
 });
 
 test('ensureVault never overwrites user files', () => {

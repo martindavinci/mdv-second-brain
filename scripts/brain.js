@@ -565,6 +565,12 @@ function cmdStatus(env) {
   return out(env, s, `workspace ${name} → ${ctx.vault} (${ctx.lang}, git ${s.git})\nToDo ${s.todo} · In Progress ${s.inProgress} · Completed ${s.completed} · open bugs ${bugs} · open ideas ${openIdeas}`);
 }
 
+// Codex runs the agent's commands in a sandbox that may not reach the config folder or the vault.
+function notWritable(e) {
+  if (!e || !['EPERM', 'EACCES', 'EROFS'].includes(e.code) || !e.path) return null;
+  return new CliError(8, `cannot write ${e.path} (the agent's sandbox may not reach it): approve this command to run outside the sandbox, add its folder to writable_roots in ~/.codex/config.toml, or use project mode (brain init --here) to keep everything inside the folder`);
+}
+
 const ERRORS = {
   'name-taken': (e) => new CliError(6, `name taken: ${e.file}`),
   'not-found': () => new CliError(2, 'not found'),
@@ -661,7 +667,7 @@ async function main(argv, io = {}) {
     }
     return 0;
   } catch (e) {
-    const err = e instanceof CliError ? e : ERRORS[e.message] ? ERRORS[e.message](e) : /^scan-failed/.test(e.message) ? new CliError(5, `${e.message} — cannot scan for secrets, nothing committed`) : null;
+    const err = e instanceof CliError ? e : ERRORS[e.message] ? ERRORS[e.message](e) : /^scan-failed/.test(e.message) ? new CliError(5, `${e.message} — cannot scan for secrets, nothing committed`) : notWritable(e);
     if (!err) {
       stderr.write(`error: ${e.message}\n`);
       return 1;

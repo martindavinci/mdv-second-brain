@@ -113,6 +113,27 @@ test('CLI in a subfolder finds the project without --config; subfolders are not 
   assert.ok(!fs.existsSync(p.globalFile));
 });
 
+test('a sandbox that forbids writing the config gets a clear way out, not a bare EPERM', async () => {
+  const p = project({ repo: false });
+  const real = fs.writeFileSync;
+  fs.writeFileSync = (file, ...rest) => {
+    if (String(file) === p.globalFile) throw Object.assign(new Error(`EPERM: operation not permitted, open '${file}'`), { code: 'EPERM', path: String(file) });
+    return real(file, ...rest);
+  };
+  try {
+    const o = io(p.proj, { MDV_SECOND_BRAIN_CONFIG: p.globalFile });
+    const code = await main(['--session', 's1', 'init', 'app', '--language', 'en', '--git-mode', 'none'], o);
+    assert.equal(code, 8);
+    const msg = o.err.join('');
+    assert.ok(msg.includes(p.globalFile), msg);
+    assert.match(msg, /approve/);
+    assert.match(msg, /writable_roots/);
+    assert.match(msg, /init --here/);
+  } finally {
+    fs.writeFileSync = real;
+  }
+});
+
 test('workspace commands are refused in project mode', async () => {
   const p = project({ repo: false });
   await initHere(p, '--git-mode', 'none');

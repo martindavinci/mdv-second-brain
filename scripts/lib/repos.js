@@ -140,7 +140,8 @@ function setRepoSection(text, content) {
 
 const SCAN_EXT = /\.(c?m?[jt]s|jsonc?|toml|ya?ml|ps1|psm1|sh|bash|bat|cmd|py|rb|go|rs|cs|csproj|props|targets|xml|ini|cfg|conf)$/i;
 const SCAN_NAMES = new Set(['makefile', 'dockerfile', 'readme.md', 'agents.md', 'claude.md']);
-const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', 'target', 'vendor', 'coverage', 'venv', '__pycache__', 'bin', 'obj']);
+// test fixtures are full of made-up paths
+const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', 'target', 'vendor', 'coverage', 'venv', '__pycache__', 'bin', 'obj', 'test', 'tests', '__tests__', 'fixtures']);
 const KEEP_HIDDEN = new Set(['.claude', '.github']);
 const MAX_FILES = 400;
 const MAX_BYTES = 256 * 1024;
@@ -181,6 +182,8 @@ function siblingRefs(r) {
   for (const file of scanFiles(r.dir)) {
     const rel = path.relative(r.dir, file).replace(/\\/g, '/');
     const atRoot = path.dirname(file) === r.dir;
+    // prose names siblings reliably but also shows examples: it proposes relations, never broken references
+    const prose = file.toLowerCase().endsWith('.md');
     let text;
     try {
       text = fs.readFileSync(file, 'utf8');
@@ -197,7 +200,7 @@ function siblingRefs(r) {
           if (fs.existsSync(path.join(r.dir, name))) continue;
           const where = `${rel}:${i + 1}`;
           if (fs.existsSync(path.join(r.base, name))) refs.push({ name, file: where });
-          else if ((atRoot || explicit) && !NOT_A_SIBLING.test(name)) broken.push({ project: r.project, file: where, ref: `../${name}` });
+          else if (!prose && (atRoot || explicit) && !NOT_A_SIBLING.test(name)) broken.push({ project: r.project, file: where, ref: `../${name}` });
         }
       }
     });

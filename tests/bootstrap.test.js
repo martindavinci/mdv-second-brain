@@ -118,6 +118,19 @@ test('bootstrap proposes relations with their evidence and reports broken siblin
   assert.ok(!later.candidates.some((c) => c.a === 'site-src' && c.b === 'site'));
 });
 
+test('prose and test fixtures never count as broken references', async () => {
+  const w = await workspace();
+  repo(join(w.code, 'docs-heavy'), {
+    files: {
+      'AGENTS.md': 'Example: `../ghost-folder` is where a sibling would be.\n',
+      'tests/x.test.js': "const fake = path.resolve(ROOT, '..', 'ghost-fixture');\n",
+      'fixtures/conf.json': '{ "out": "../ghost-out" }\n',
+    },
+  });
+  const plan = (await w.brain('--json', 'bootstrap', '--dry-run')).json();
+  assert.deepEqual(plan.broken.filter((b) => b.project === 'docs-heavy'), []);
+});
+
 test('brain status counts repos without a hub and hubs whose repo folder is gone', async () => {
   const w = await workspace();
   assert.match((await w.brain('status')).text, /repos: 5 without hub · 0 hubs without their repo folder → brain bootstrap --dry-run/);

@@ -107,11 +107,19 @@ function gitModeFor(cfg, name) {
 
 const samePath = (a, b) => a && b && normalize(a) === normalize(b);
 
+// The vault's own repo (per-workspace or single), trusted even when another account owns it (see git.trust); a host
+// repo is the user's project and keeps git's ownership check.
+function ownRepo(cfg, name, vaultDir) {
+  const repo = gitModeFor(cfg, name) === 'single' ? cfg.root : vaultDir;
+  git.trust(repo);
+  return repo;
+}
+
 function setupGit(cfg, name, vaultDir) {
   const mode = gitModeFor(cfg, name);
   if (mode === 'none' || mode === 'host') return;
   if (!git.available()) return;
-  const repo = mode === 'single' ? cfg.root : vaultDir;
+  const repo = ownRepo(cfg, name, vaultDir);
   const top = git.toplevel(repo);
   if (!samePath(top, repo)) {
     git.init(repo);
@@ -159,8 +167,8 @@ function repoFor(cfg, name, vaultDir) {
     if (!top) return null;
     return { repo: top, pathspec: path.relative(top, vaultDir).replace(/\\/g, '/') || '.' };
   }
-  if (mode === 'single') return { repo: cfg.root, pathspec: path.relative(cfg.root, vaultDir).replace(/\\/g, '/') || '.' };
-  return { repo: vaultDir, pathspec: '.' };
+  const repo = ownRepo(cfg, name, vaultDir);
+  return { repo, pathspec: path.relative(repo, vaultDir).replace(/\\/g, '/') || '.' };
 }
 
 module.exports = { GITIGNORE, GITATTRIBUTES, DIRS, ROOT_FILES, languageFor, ensureVault, gitModeFor, setupGit, applyGitConfig, repoFor, assertNoOverlap };

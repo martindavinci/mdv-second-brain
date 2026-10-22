@@ -41,6 +41,8 @@ writable_roots = ["~/Documents/SecondBrain", "~/.config/mdv-second-brain"]
 
 or start Codex with `codex --add-dir ~/Documents/SecondBrain --add-dir ~/.config/mdv-second-brain`, or use project mode (`brain init --here`), which keeps everything inside the folder. When activation fails because the sandbox cannot write the configuration (exit 8), the agent lists these ways out; on request, `brain init --config-here` keeps the configuration in the activated folder (`<folder>/.config/mdv-second-brain/`, a copy of the global settings plus the new workspace, excluded from the folder's git repo), found from any subfolder.
 
+On Windows the sandbox runs commands as a separate account, so a vault repo created by Codex belongs to that account, and git refuses it from your own account as "dubious ownership" (and the other way round). The plugin's own git commands trust the configured vault's repo for that command only (`git -c safe.directory=<vault>`); your global git config is never changed. For your own git commands in such a vault, take ownership of it: `takeown /f <vault> /r`.
+
 Both hosts share the same configuration and vaults: a workspace activated in one is active in the other.
 
 ## Activate

@@ -3,9 +3,27 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
+// Repos this process may use although another account owns them: on Windows the Codex sandbox runs as its own user,
+// and git refuses the repos it created ("dubious ownership"). Only a vault's own repo is added, and only on the
+// command line: the global git config is never changed.
+const trusted = new Set();
+
+function trust(repo) {
+  if (!repo) return;
+  let real;
+  try {
+    real = fs.realpathSync.native(repo);
+  } catch {
+    real = path.resolve(repo);
+  }
+  trusted.add(real.replace(/\\/g, '/'));
+}
+
+const safeArgs = () => [...trusted].flatMap((d) => ['-c', `safe.directory=${d}`]);
+
 // Exact output: porcelain status lines start with a meaningful space, so never trim those.
 function runRaw(cwd, args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  return execFileSync('git', [...safeArgs(), ...args], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
 }
 
 function run(cwd, args) {
@@ -174,4 +192,4 @@ function detectIdentity(dir, { vaultDir, home = require('node:os').homedir() } =
   return name && email ? { name, email, source: 'global' } : null;
 }
 
-module.exports = { run, runRaw, available, toplevel, init, excludeInParent, commitPath, trackedPrivate, moveFile, detectIdentity, localIdentity, identityArgs, literal };
+module.exports = { run, runRaw, trust, available, toplevel, init, excludeInParent, commitPath, trackedPrivate, moveFile, detectIdentity, localIdentity, identityArgs, literal };

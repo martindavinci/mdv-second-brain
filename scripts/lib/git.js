@@ -66,4 +66,19 @@ function commitPath(repo, pathspec, message) {
   }
 }
 
-module.exports = { run, available, toplevel, init, excludeInParent, commitPath };
+// git mv when the file is tracked, plain rename otherwise. Never overwrites: dest must not exist.
+function moveFile(src, dest) {
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  const top = available() ? toplevel(path.dirname(src)) : null;
+  if (top) {
+    try {
+      run(top, ['ls-files', '--error-unmatch', '--', src]);
+      run(top, ['mv', '--', src, dest]);
+      return dest;
+    } catch {}
+  }
+  fs.renameSync(src, dest);
+  return dest;
+}
+
+module.exports = { run, available, toplevel, init, excludeInParent, commitPath, moveFile };

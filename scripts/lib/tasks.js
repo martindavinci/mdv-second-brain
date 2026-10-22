@@ -313,16 +313,7 @@ function moveToArchive(ctx, file) {
   fs.mkdirSync(dir, { recursive: true });
   let dest = path.join(dir, path.basename(file));
   for (let n = 2; fs.existsSync(dest); n++) dest = path.join(dir, `${nameOf(file)} (${n}).md`);
-  const top = git.available() ? git.toplevel(path.dirname(file)) : null;
-  if (top) {
-    try {
-      git.run(top, ['ls-files', '--error-unmatch', '--', file]);
-      git.run(top, ['mv', '--', file, dest]);
-      return dest;
-    } catch {}
-  }
-  fs.renameSync(file, dest);
-  return dest;
+  return git.moveFile(file, dest);
 }
 
 function deleteItem(ctx, name) {

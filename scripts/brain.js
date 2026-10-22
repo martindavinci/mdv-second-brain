@@ -10,8 +10,9 @@ const git = require('./lib/git');
 const { isInside } = require('./lib/paths');
 const { resolveWorkspace, projectFor } = require('./lib/resolve');
 const { projectName } = require('./lib/names');
+const { locate, LOCAL_VAULT } = require('./lib/locate');
 
-const BOOL = new Set(['json', 'yes', 'blocked', 'open', 'quick', 'apply', 'archive', 'plan']);
+const BOOL = new Set(['json', 'yes', 'blocked', 'open', 'quick', 'apply', 'archive', 'plan', 'here']);
 const GIT_MODES = ['per-workspace', 'single', 'none', 'host'];
 
 function parseArgs(argv) {
@@ -201,6 +202,43 @@ function bind(env, name, attached) {
   return !!(sid || literal);
 }
 
+function gitSettings(flags, dir, vaultDir) {
+  const mode = str(flags['git-mode']) || 'per-workspace';
+  if (!GIT_MODES.includes(mode)) throw new CliError(2, `bad --git-mode: use ${GIT_MODES.join(' | ')}`);
+  const g = { mode };
+  const identity = str(flags.identity) || 'detected';
+  if (mode !== 'none' && identity === 'detected') {
+    // remembered per workspace and passed to each commit (`git -c`): shared repos never accumulate identities
+    const id = git.detectIdentity(dir, { vaultDir });
+    if (id && id.source !== 'global') {
+      g.identity = { name: id.name, email: id.email, ...(id.file ? { file: id.file } : {}) };
+      // the vault's own repo also gets it in its config, so manual commits there match
+      if (mode === 'per-workspace') g.config = id.source === 'gitconfig-file' ? { 'include.path': id.includePath } : { 'user.name': id.name, 'user.email': id.email };
+    }
+  }
+  return g;
+}
+
+// Project mode: config, session state and vault all live in <dir>/SecondBrain; nothing is written elsewhere.
+function cmdInitHere(env, dir, args) {
+  const { flags } = env;
+  const file = config.localConfigFile(dir);
+  const cfg = fs.existsSync(file) ? config.loadConfig(file) : { ...config.defaults(), local: true };
+  const name = args[0] || Object.keys(cfg.workspaces)[0] || defaultName(dir);
+  config.assertWorkspaceName(name);
+  if (!cfg.workspaces[name]) {
+    if (Object.keys(cfg.workspaces).length) throw new CliError(2, `project mode: this folder already has a brain (${Object.keys(cfg.workspaces)[0]})`);
+    cfg.workspaces[name] = { git: gitSettings(flags, dir, path.join(dir, LOCAL_VAULT)) };
+  }
+  const ws = cfg.workspaces[name];
+  if (str(flags.language) && (!ws.language || ws.language === 'auto')) ws.language = str(flags.language);
+  config.saveConfig(cfg, file);
+  const here = { ...env, cfg: config.loadConfig(file), cfgFile: file };
+  const v = ensure(here, name, str(flags.language), true);
+  bind(here, name, false);
+  return out(env, { workspace: name, vault: v.vault, project: true }, `brain active (project mode): ${name} → ${v.vault}`);
+}
+
 function cmdInit(env, args) {
   const { cfg, flags } = env;
   const dir = path.resolve(env.cwd, str(flags.path) || '.');
@@ -208,6 +246,7 @@ function cmdInit(env, args) {
     const p = initPlan(env, dir);
     return out(env, p, JSON.stringify(p, null, 2));
   }
+  if (flags.here) return cmdInitHere(env, dir, args);
   const r = resolveWorkspace(cfg, dir);
   // without an explicit name a new folder gets a new workspace: never merge it into a same-named one
   let name = args[0] || (r.status === 'mapped' ? r.name : defaultName(dir));
@@ -215,22 +254,10 @@ function cmdInit(env, args) {
   config.assertWorkspaceName(name);
   let ws = cfg.workspaces[name];
   if (!ws) {
-    const mode = str(flags['git-mode']) || 'per-workspace';
-    if (!GIT_MODES.includes(mode)) throw new CliError(2, `bad --git-mode: use ${GIT_MODES.join(' | ')}`);
-    ws = { paths: [dir], git: { mode } };
-    if (str(flags.vault)) ws.vault = path.resolve(env.cwd, str(flags.vault));
-    vault.assertNoOverlap(cfg, name, ws.vault || path.join(cfg.root, name));
-    const identity = str(flags.identity) || 'detected';
-    if (mode !== 'none' && identity === 'detected') {
-      // remembered per workspace and passed to each commit (`git -c`): shared repos never accumulate identities
-      const vaultDir = ws.vault || path.join(cfg.root, name);
-      const id = git.detectIdentity(dir, { vaultDir });
-      if (id && id.source !== 'global') {
-        ws.git.identity = { name: id.name, email: id.email, ...(id.file ? { file: id.file } : {}) };
-        // the vault's own repo also gets it in its config, so manual commits there match
-        if (mode === 'per-workspace') ws.git.config = id.source === 'gitconfig-file' ? { 'include.path': id.includePath } : { 'user.name': id.name, 'user.email': id.email };
-      }
-    }
+    const vaultDir = str(flags.vault) ? path.resolve(env.cwd, str(flags.vault)) : null;
+    vault.assertNoOverlap(cfg, name, vaultDir || path.join(cfg.root, name));
+    ws = { paths: [dir], git: gitSettings(flags, dir, vaultDir || path.join(cfg.root, name)) };
+    if (vaultDir) ws.vault = vaultDir;
     cfg.workspaces[name] = ws;
   } else if (!(ws.paths || []).some((p) => isInside(dir, p)) && !isInside(dir, config.vaultPathFor(cfg, name))) {
     ws.paths = [...(ws.paths || []), dir];
@@ -566,12 +593,14 @@ async function main(argv, io = {}) {
   // Codex has no session substitution in skills: its shell exposes the thread id instead
   const hostSid = io.env && (io.env.CODEX_THREAD_ID || io.env.CODEX_SESSION_ID);
   if (!sessionOf(flags).sid && hostSid) flags.session = hostSid;
-  const cfgFile = str(flags.config) || config.configPath();
+  const globalFile = config.configPath(io.env);
+  const cfgFile = str(flags.config) || locate(cwd, { globalFile }) || globalFile;
   try {
     const cfg = config.loadConfig(cfgFile);
     const env = { cfg, cfgFile, flags, cwd, stdout, stderr };
     const [cmd, sub, ...rest] = pos;
     const args = [sub, ...rest].filter((x) => x !== undefined);
+    if (cfg.local && (cmd === 'workspace' || cmd === 'adopt')) throw new CliError(2, 'project mode: this folder has its own brain; workspaces live in the global config (run the command outside this folder)');
     switch (cmd) {
       case 'task':
       case 'issue':

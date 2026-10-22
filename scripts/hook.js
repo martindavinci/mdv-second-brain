@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 // Hook entry: session-start | prompt | post-tool | stop. Never throws, always exits 0, prints nothing on error.
-// Only node built-ins are loaded until a config file exists: outside the second brain the cost is one stat
-// and draining stdin.
+// Only node built-ins are loaded until a config is found: outside the second brain the cost is reading stdin and
+// one stat per parent folder.
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -28,7 +28,7 @@ function sessionContext(env, ws, sid, cwd) {
   const lang = vault.languageFor(cfg, ws);
   const v = vaultPathFor(cfg, ws);
   let dailyFile = daily.dailyPath(v, now);
-  const o = { ws, vault: v, lang, cli: env.cli, sid, marker: `session:${daily.sid8(sid)}`, needsInit: !lang };
+  const o = { ws, vault: v, lang, cli: env.cli, cliConfig: env.cliConfig, sid, marker: `session:${daily.sid8(sid)}`, needsInit: !lang };
   const r = resolveWorkspace(cfg, cwd);
   const raw = r.status === 'mapped' && r.name === ws ? projectFor(cfg, ws, cwd) : null;
   o.project = raw ? projectName(raw) : null;
@@ -94,7 +94,7 @@ function touched(env, sid, abs, out, gone = false) {
   // every change of workspace is announced, the way back to the origin too: the model must drop the
   // previous workspace's CLI line before writing anything
   if (ws !== (idx.current || idx.origin)) {
-    out.push(switchContext({ ws, vault: v, dailyFile: sec.file, marker: sec.marker, cli: env.cli, sid, back: ws === idx.origin }));
+    out.push(switchContext({ ws, vault: v, dailyFile: sec.file, marker: sec.marker, cli: env.cli, cliConfig: env.cliConfig, sid, back: ws === idx.origin }));
     state.writeIndex(stateDir, sid, { ...state.readIndex(stateDir, sid), current: ws });
   }
   if (!gone && capturing(cfg, abs) && !(s.captured || []).includes(abs)) {
@@ -178,12 +178,17 @@ function handle(event, input, env) {
 }
 
 function run(event, input, opts = {}) {
-  const cfgFile = opts.cfgFile || defaultConfigPath();
+  const { locate, isLocalFile } = require('./lib/locate');
+  const where = (input && typeof input === 'object' && input.cwd) || process.cwd();
+  const cfgFile = opts.cfgFile || locate(where, { globalFile: opts.globalFile || defaultConfigPath() });
+  if (!cfgFile) return { stdout: '' };
   const configDir = path.dirname(cfgFile);
   try {
     if (!fs.existsSync(cfgFile)) return { stdout: '' };
     if (!input || typeof input !== 'object') throw new Error('bad-input: hook stdin is not a JSON object');
-    const env = { now: opts.now || new Date(), cli: opts.cli || DEFAULT_CLI, cfgFile, stateDir: path.join(configDir, 'state') };
+    // a project's own config is not where the CLI looks by default from every folder: name it in the CLI line
+    const cliConfig = isLocalFile(cfgFile) ? cfgFile : null;
+    const env = { now: opts.now || new Date(), cli: opts.cli || DEFAULT_CLI, cliConfig, cfgFile, stateDir: path.join(configDir, 'state') };
     return { stdout: handle(event, input, env) || '' };
   } catch (e) {
     try {
@@ -208,13 +213,9 @@ const EVENTS = { SessionStart: 'session-start', UserPromptSubmit: 'prompt', Post
 function main(argEvent) {
   let out = '';
   try {
-    if (fs.existsSync(defaultConfigPath())) {
-      const input = readStdin();
-      out = run(argEvent || (input && EVENTS[input.hook_event_name]), input).stdout;
-    } else {
-      // inert, but the host is still writing the event: leaving it unread fails the hook on large inputs
-      fs.readFileSync(0);
-    }
+    // always read the event: the project config is found from its cwd, and leaving stdin unread fails the hook
+    const input = readStdin();
+    out = run(argEvent || (input && EVENTS[input.hook_event_name]), input).stdout;
   } catch {}
   if (out) process.stdout.write(out);
   process.exitCode = 0;

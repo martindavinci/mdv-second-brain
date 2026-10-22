@@ -12,12 +12,13 @@ CLI: `node "<plugin root>/scripts/brain.js" <command>` — written `brain <comma
 ## Activation (only when the user asks)
 Outside a workspace the plugin is inert: do nothing unless the user asks to activate it.
 - Guided (`/brain init` or `$second-brain init`, "attiva brain qui", "attiva brain per questa chat"): run `brain --json init --plan`, then ask ONE round of at most 4 questions with the host's question tool (AskUserQuestion, or request_user_input in Codex; if neither is available, one plain message with numbered options). Recommended option first; skip what the plan already answers (`mapped` set → just bind with `brain init <mapped>`).
-  1. What to activate: this folder (recommended) / the parent folder with all its projects (offer when `parentHasRepos`) / only this chat.
+  1. What to activate: this folder (recommended) / the parent folder with all its projects (offer when `parentHasRepos`) / only this project, everything inside it (no workspace) / only this chat.
   2. Workspace: new `<defaultName>` (recommended) / an existing one from `workspaces` (the only time other workspace names may be shown).
   3. Vault: common root `<defaultVault>` (recommended) / inside the folder `<insideVault>` / a custom path.
   4. Git: own repo with the detected identity (show `identity.name <identity.email>`; recommended) / own repo with the global identity / no git / inside the repo that contains the vault.
   Never ask the language: use the code of the user's chat language.
   Then run `brain init <ws> --path <dir> [--vault <dir>] --git-mode per-workspace|none|host [--identity detected|global] --language <code>`.
+  For "only this project" skip questions 2–3: `brain init --here --language <code> [--git-mode per-workspace|none|host] [--identity detected|global]` (vault, config and state all in `<folder>/SecondBrain`).
   For "only this chat" never map the folder: a new workspace is `brain workspace add <ws> --language <code> [--vault <dir>]`, then `brain attach <ws>`.
 - Quick ("attiva brain con i default", `/brain init --quick` or `$second-brain init --quick`): `brain init --quick --language <code>`, no questions.
 - Off for this chat ("disattiva brain"): `brain detach`.

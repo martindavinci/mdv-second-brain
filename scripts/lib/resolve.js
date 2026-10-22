@@ -27,6 +27,8 @@ function resolveWorkspace(cfg, absPath) {
 }
 
 function projectFor(cfg, name, absPath) {
+  // project mode: the folder is the project, its subfolders are not
+  if (cfg.local) return null;
   const r = resolveWorkspace(cfg, absPath);
   if (r.status !== 'mapped' || r.name !== name || r.via !== 'path') return null;
   const rel = path.relative(r.mappedDir, path.resolve(absPath));

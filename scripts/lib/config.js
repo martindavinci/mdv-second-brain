@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { expandHome, defaultRoot } = require('./paths');
+const { LOCAL_VAULT, localConfigFile, projectOfLocal } = require('./locate');
 
 const DEFAULT_BOARD = '00_Inbox/Plan.md';
 
@@ -22,8 +23,8 @@ function defaults() {
   };
 }
 
-function configPath() {
-  return process.env.MDV_SECOND_BRAIN_CONFIG || path.join(os.homedir(), '.config', 'mdv-second-brain', 'config.json');
+function configPath(env = process.env) {
+  return env.MDV_SECOND_BRAIN_CONFIG || path.join(os.homedir(), '.config', 'mdv-second-brain', 'config.json');
 }
 
 function configDir() {
@@ -65,7 +66,30 @@ function loadConfig(file = configPath()) {
     throw new Error('invalid-config');
   }
   if (!isPlainObject(data)) throw new Error('invalid-config');
-  return expandPaths(deepMerge(defaults(), data));
+  const cfg = expandPaths(deepMerge(defaults(), data));
+  return cfg.local ? deriveLocal(cfg, file) : cfg;
+}
+
+// Project mode: the folder and the vault come from where the config lives, so the project can move.
+function deriveLocal(cfg, file) {
+  const proj = projectOfLocal(file);
+  cfg.root = proj;
+  for (const ws of Object.values(cfg.workspaces)) {
+    ws.paths = [proj];
+    ws.vault = path.join(proj, LOCAL_VAULT);
+  }
+  return cfg;
+}
+
+function withoutDerived(cfg) {
+  if (!cfg.local) return cfg;
+  const c = JSON.parse(JSON.stringify(cfg));
+  delete c.root;
+  for (const ws of Object.values(c.workspaces || {})) {
+    delete ws.paths;
+    delete ws.vault;
+  }
+  return c;
 }
 
 // Only what differs from the defaults: a later version's new defaults still reach this config.
@@ -82,7 +106,7 @@ function diffDefaults(value, def) {
 }
 
 function saveConfig(cfg, file = configPath()) {
-  const own = diffDefaults(cfg, defaults()) || {};
+  const own = diffDefaults(withoutDerived(cfg), defaults()) || {};
   const out = { version: cfg.version || 1, ...own };
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(out, null, 2) + '\n');
@@ -103,6 +127,6 @@ function assertWorkspaceName(name) {
 }
 
 module.exports = {
-  DEFAULT_BOARD, defaults, configPath, configDir, stateDir, loadConfig, saveConfig,
+  DEFAULT_BOARD, defaults, configPath, configDir, stateDir, loadConfig, saveConfig, localConfigFile,
   vaultPathFor, boardPathFor, assertWorkspaceName,
 };

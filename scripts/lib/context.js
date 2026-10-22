@@ -5,13 +5,13 @@ const TARGET = 2500;
 const CAP = 6000;
 const MAX_ITEMS = 5;
 
-const cliCmd = (cli, sid) => `node "${cli}" --session ${sid}`;
+const cliCmd = (cli, sid, cfgFile) => `node "${cli}"${cfgFile ? ` --config "${cfgFile}"` : ''} --session ${sid}`;
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 
-function head({ ws, vault, lang, cli, sid, dailyFile, marker, needsInit }) {
+function head({ ws, vault, lang, cli, cliConfig, sid, dailyFile, marker, needsInit }) {
   const lines = [
     `[second-brain] workspace=${ws} vault=${vault} lang=${lang || 'unset'}`,
-    `cli: ${cliCmd(cli, sid)}`,
+    `cli: ${cliCmd(cli, sid, cliConfig)}`,
     `daily: ${dailyFile} — your section marker: ${marker}; update it only with \`checkpoint --status … --next … --open … --log …\`, never by editing the file`,
     'Read AGENTS.md, WORKFLOW.md and TOOLS.md of the vault once per context, before your first write there.',
     'Rules: (1) keep your checkpoint and the active task (Status, TODO, Log) current while you work; when a piece is done, distil it and run `commit`.',
@@ -19,7 +19,7 @@ function head({ ws, vault, lang, cli, sid, dailyFile, marker, needsInit }) {
     '(4) Silent: at most one line about the brain per reply. (5) Never delete notes: archive them.',
     'Orient with `context`, `show <name> --section <heading>`, `search <text>`; never read Home, generated indexes, whole dailies or the archive.',
   ];
-  if (needsInit) lines.push(`Vault not created yet: run ${cliCmd(cli, sid)} init ${ws} --language <the user's chat language code> before the first write.`);
+  if (needsInit) lines.push(`Vault not created yet: run ${cliCmd(cli, sid, cliConfig)} init ${ws} --language <the user's chat language code> before the first write.`);
   return lines.join('\n');
 }
 
@@ -51,18 +51,18 @@ function buildSessionContext(o) {
   return clip(text, CAP);
 }
 
-function switchContext({ ws, vault, dailyFile, marker, cli, sid, back = false }) {
+function switchContext({ ws, vault, dailyFile, marker, cli, cliConfig, sid, back = false }) {
   if (back) {
     return [
       `[second-brain] back in workspace=${ws} vault=${vault}`,
-      `cli: ${cliCmd(cli, sid)} (use exactly this line again, without any workspace flag)`,
+      `cli: ${cliCmd(cli, sid, cliConfig)} (use exactly this line again, without any workspace flag)`,
       `daily: ${dailyFile} — your section marker: ${marker}`,
       'Notes about this work go to this vault only.',
     ].join('\n');
   }
   return [
     `[second-brain] you are now working in workspace=${ws} vault=${vault}`,
-    `cli: ${cliCmd(cli, sid)} --workspace ${ws}`,
+    `cli: ${cliCmd(cli, sid, cliConfig)} --workspace ${ws}`,
     `daily: ${dailyFile} — your section marker: ${marker}`,
     `Read AGENTS.md, WORKFLOW.md and TOOLS.md of this vault before writing there. Keep this workspace's notes about this workspace only.`,
   ].join('\n');

@@ -30,7 +30,16 @@ codex plugin marketplace add martindavinci/mdv-second-brain
 codex plugin add mdv-second-brain@mdv-second-brain
 ```
 
-Then open Codex once, run `/hooks` and trust the plugin's four hooks: Codex never runs plugin hooks you have not trusted, and asks again when an update changes them.
+Then start `codex` once: at startup it shows **Hooks need review** — choose **Trust all and continue**. Codex never runs plugin hooks you have not trusted, and asks again when an update changes them. `/hooks` lists the four hooks (SessionStart, UserPromptSubmit, PostToolUse, Stop); all four must be trusted and enabled.
+
+Codex runs the agent's commands in a sandbox: the vault root and the plugin's configuration folder must be writable, otherwise every vault write asks for approval. Add them in `~/.codex/config.toml` (absolute paths):
+
+```toml
+[sandbox_workspace_write]
+writable_roots = ["/absolute/path/to/SecondBrain", "/absolute/path/to/.config/mdv-second-brain"]
+```
+
+or use project mode (`brain init --here`), which keeps everything inside the folder.
 
 Both hosts share the same configuration and vaults: a workspace activated in one is active in the other.
 
@@ -38,7 +47,7 @@ Both hosts share the same configuration and vaults: a workspace activated in one
 
 In the folder you work in, say **"attiva brain per questa chat"** / **"enable the second brain here"**, or run `/brain init` (Claude Code) / `$second-brain init` (Codex). The agent asks one round of questions:
 
-1. what to activate — this folder, the parent folder with all its projects, or only this chat;
+1. what to activate — this folder, the parent folder with all its projects, only this project (project mode, below), or only this chat;
 2. which workspace — a new one or an existing one;
 3. where the vault lives — the common root, inside the folder, or a custom path;
 4. git — its own repo with the identity found in the folder, the global identity, no git, or inside the repo that already contains the vault.
@@ -49,6 +58,7 @@ In the folder you work in, say **"attiva brain per questa chat"** / **"enable th
 
 - **One root for everything** (default): `<root>/<workspace>/` for every workspace, with `root` = `~/Documents/SecondBrain` (or `~/SecondBrain`).
 - **Custom vault per workspace**: any workspace can keep its vault elsewhere, for example inside the folder it maps (`<folder>/SecondBrain`). A vault inside another git repo gets its own repo and is added to the parent's `.git/info/exclude`, or uses the parent repo (`host` mode).
+- **Project mode** (`brain init --here`): no workspaces and nothing outside the folder. Vault, configuration and session state all live in `<folder>/SecondBrain` (configuration in `SecondBrain/.brain/local/`, never committed); the vault gets its own git repo, excluded from the project's. The hooks find it from any subfolder; moving the folder keeps it working; subfolders are not split into projects. Inside a wider workspace the project's own brain wins; a workspace mapped inside the project wins in its folder. Useful with Codex, whose sandbox only lets the agent write inside the folder.
 
 ## Configuration
 
@@ -116,7 +126,7 @@ The board has four lanes — ToDo, In Progress, Completed, Discarded — and the
 
 | Command | What it does |
 |---|---|
-| `brain init [<ws>] [--quick] [--path] [--vault] [--git-mode] [--identity] [--language]` | activate a folder; `--plan` prints what the guided questions need |
+| `brain init [<ws>] [--quick] [--here] [--path] [--vault] [--git-mode] [--identity] [--language]` | activate a folder; `--here` = project mode; `--plan` prints what the guided questions need |
 | `brain attach <ws>` / `brain detach` | turn the brain on or off for the current chat only |
 | `brain task add "<Name>" [--project] [--feature] [--status]` | new task note + card (same subcommands for `issue`) |
 | `brain task list` · `show` · `move` · `block` · `unblock` · `done` · `discard` · `delete --yes` · `sync` | manage tasks and issues |

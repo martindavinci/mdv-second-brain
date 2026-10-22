@@ -85,3 +85,24 @@ test('cli feature add creates a proposed feature without a card', async () => {
   assert.match(read(f), /lifecycle: proposed/);
   assert.doesNotMatch(read(join(v, '00_Inbox', 'Plan.md')), /Refunds/);
 });
+
+test('cli project add creates the hub from the template, once', async () => {
+  const { cfgFile, code, vault: v } = makeVault();
+  assert.equal(await main(['--config', cfgFile, 'project', 'add', 'alpha'], { cwd: code, ...io() }), 0);
+  const hub = join(v, '20_Projects', 'alpha', 'alpha.md');
+  assert.match(read(hub), /^---\ntype: project\nstatus: active\ndepends_on: \[\]\nused_by: \[\]\nsource_of: \[\]\nrelated: \[\]/);
+  assert.match(read(hub), /<!-- brain:project-index -->/);
+  const o = io();
+  assert.equal(await main(['--config', cfgFile, 'project', 'add', 'alpha'], { cwd: code, ...o }), 6);
+});
+
+test('cli postmortem add writes the dated note in the project folder', async () => {
+  const { cfgFile, code, vault: v } = makeVault();
+  fs.mkdirSync(join(code, 'alpha'), { recursive: true });
+  const o = io();
+  assert.equal(await main(['--config', cfgFile, 'postmortem', 'add', 'Lost', 'uploads'], { cwd: join(code, 'alpha'), ...o }), 0);
+  const dir = join(v, '20_Projects', 'alpha');
+  const f = fs.readdirSync(dir).find((n) => n.startsWith('alpha — Post Mortem '));
+  assert.ok(f, fs.readdirSync(dir).join(','));
+  assert.match(read(join(dir, f)), /type: postmortem[\s\S]*# Lost uploads[\s\S]*## Lessons/);
+});

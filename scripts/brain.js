@@ -349,6 +349,10 @@ function cmdProject(env, sub, args) {
   const home = require('./lib/home');
   const { ctx } = workspaceCtx(env);
   switch (sub) {
+    case 'add': {
+      const r = tasks.addProjectHub(ctx, requireArg(args.join(' '), 'project'), { summary: str(env.flags.summary) });
+      return out(env, r, `project hub added: ${rel(ctx, r.file)}`);
+    }
     case 'list': {
       const names = new Set([...home.hubs(ctx.vault), ...tasks.listItems(ctx, {}).map((i) => i.project).filter(Boolean)]);
       for (const b of boards.listBoards(ctx)) if (b.project) names.add(b.project);
@@ -365,6 +369,13 @@ function cmdProject(env, sub, args) {
     default:
       throw new CliError(2, `unknown project command: ${sub || '(none)'}`);
   }
+}
+
+function cmdPostmortem(env, sub, args) {
+  if (sub !== 'add') throw new CliError(2, 'usage: brain postmortem add <title…> [--project <p>]');
+  const { name: ws, ctx } = workspaceCtx(env);
+  const r = tasks.addPostmortem(ctx, { title: requireArg(args.join(' '), 'title'), project: cwdProject(env, ws) });
+  return out(env, r, `post mortem created: ${rel(ctx, r.file)} — fill every section`);
 }
 
 function runIndex(env, ctx) {
@@ -446,7 +457,7 @@ const ERRORS = {
   'invalid-config': () => new CliError(2, `invalid config file: ${config.configPath()}`),
 };
 
-const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|context|search|project|workspace|secret|index|commit|status> …';
+const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|context|search|project|postmortem|workspace|secret|index|commit|status> …';
 
 async function main(argv, io = {}) {
   const stdout = io.stdout || process.stdout;
@@ -485,6 +496,9 @@ async function main(argv, io = {}) {
         break;
       case 'project':
         cmdProject(env, sub, rest);
+        break;
+      case 'postmortem':
+        cmdPostmortem(env, sub, rest);
         break;
       case 'context':
         cmdContext(env);

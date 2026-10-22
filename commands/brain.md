@@ -1,0 +1,12 @@
+---
+description: Second brain — activate it for this folder or chat, manage tasks, issues and ideas, search and commit the vault.
+argument-hint: "[init [--quick] | attach <ws> | detach | task … | issue … | idea … | context | search <text> | project … | distill | postmortem <title> | index | commit -m <msg> | status]"
+---
+
+Use the second-brain skill for this request. Arguments: $ARGUMENTS
+
+- No arguments → run `brain status` and report it in one or two lines.
+- `init` alone → the skill's guided activation (one round of questions). `init --quick` → quick activation, no questions.
+- `distill` → level 2 of the skill for the current work, then `brain commit -m "<summary>"`.
+- `postmortem <title>` → `brain postmortem add "<title>"`, fill every section from this session, put the lessons into the feature, then `brain commit -m "post mortem: <title>"`.
+- Anything else → run `brain <arguments>` with the CLI line from the skill and summarise the result in one or two lines.

@@ -262,6 +262,34 @@ function addFeature(ctx, { title, project, lifecycle = 'proposed' }) {
   return { name, file };
 }
 
+function addProjectHub(ctx, raw, { summary } = {}) {
+  const p = projectName(raw);
+  const existing = findNote(ctx.vault, p);
+  if (existing) throw nameTaken(p, existing);
+  const file = path.join(ctx.vault, '20_Projects', p, `${p}.md`);
+  const day = today(ctx);
+  const data = { type: 'project', status: 'active', depends_on: [], used_by: [], source_of: [], related: [], created: day, updated: day };
+  const body = templates.fill(templates.load(ctx.lang, 'project.md'), { title: p, summary: summary || '—' });
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, frontmatter.stringify(data, body));
+  afterWrite(ctx);
+  return { name: p, file };
+}
+
+function addPostmortem(ctx, { title, project }) {
+  const day = today(ctx);
+  const base = project ? `${projectName(project)} — Post Mortem ${day}` : `Post Mortem ${day}`;
+  let name = base;
+  for (let n = 2; findNote(ctx.vault, name); n++) name = `${base} (${n})`;
+  const dir = project ? path.join(ctx.vault, '20_Projects', projectName(project)) : path.join(ctx.vault, '10_Notes');
+  const file = path.join(dir, `${name}.md`);
+  const data = { type: 'postmortem', ...(project ? { project: `[[${projectName(project)}]]` } : {}), created: day, updated: day };
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(file, frontmatter.stringify(data, templates.fill(templates.load(ctx.lang, 'postmortem.md'), { title: noteName(title) })));
+  afterWrite(ctx);
+  return { name, file };
+}
+
 function requireItem(ctx, name) {
   const file = findNote(ctx.vault, name);
   if (!file) throw new Error('not-found');
@@ -431,6 +459,6 @@ function archiveDone(ctx, now = new Date(), days = 14) {
 
 module.exports = {
   KINDS, ITEM_KINDS, noteName, projectName, itemDir, archiveDir, scanNotes, findNote, itemFiles, readNote, writeNote,
-  kindOf, projectOfNote, syncFromBoard, addItem, addFeature, moveItem, setBlocked, deleteItem, listItems, showItem,
+  kindOf, projectOfNote, syncFromBoard, addItem, addFeature, addProjectHub, addPostmortem, moveItem, setBlocked, deleteItem, listItems, showItem,
   showNote, sectionOf, truncate, archiveDone, moveToArchive, openBoards, saveBoards, removeCards, today,
 };

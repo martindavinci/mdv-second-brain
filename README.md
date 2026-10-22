@@ -1,0 +1,116 @@
+# mdv-second-brain
+
+A Claude Code plugin that keeps an Obsidian-compatible **second brain** for each workspace while you work: a Kanban board whose cards link to living task and issue notes, a daily note with the state of every session, distilled project knowledge, ideas, decisions and post mortems — written by Claude, without you asking, and without mixing workspaces.
+
+- **Zero manual work.** Claude creates the task when work starts, keeps its status current, distils what lasts into the feature and project notes when a piece is done, and commits the vault.
+- **Never forgets.** Hooks track what changed in the session; if Claude edited your project but not the vault, it is reminded once before it stops. If a session dies, the next one starts from the last checkpoint.
+- **Strict isolation.** A workspace's vault never mentions another workspace.
+- **Inert elsewhere.** Outside a workspace the plugin prints nothing and writes nothing until you activate it.
+- **Small context.** The vault is meant to be read by an agent: short injected context, size budgets, rotation of long logs, and bounded reads (`context`, `show --section`, `search`).
+
+## Requirements
+
+- Claude Code with plugin support.
+- Node.js ≥ 18 (no dependencies). Without Node the plugin stays inactive and says so at session start.
+- git (optional): without it the vault is still written, just not committed.
+
+## Install
+
+```
+/plugin marketplace add <owner>/mdv-second-brain
+/plugin install mdv-second-brain@mdv-second-brain
+```
+
+## Activate
+
+In the folder you work in, say **"attiva brain per questa chat"** / **"enable the second brain here"**, or run `/brain init`. Claude asks one round of questions:
+
+1. what to activate — this folder, the parent folder with all its projects, or only this chat;
+2. which workspace — a new one or an existing one;
+3. where the vault lives — the common root, inside the folder, or a custom path;
+4. git — its own repo with the identity found in the folder, the global identity, no git, or inside the repo that already contains the vault.
+
+`/brain init --quick` uses the defaults without questions. "disattiva brain per questa chat" (`brain detach`) turns it off for the current chat.
+
+## Storage layouts
+
+- **One root for everything** (default): `<root>/<workspace>/` for every workspace, with `root` = `~/Documents/SecondBrain` (or `~/SecondBrain`).
+- **Custom vault per workspace**: any workspace can keep its vault elsewhere, for example inside the folder it maps (`<folder>/SecondBrain`). A vault inside another git repo gets its own repo and is added to the parent's `.git/info/exclude`, or uses the parent repo (`host` mode).
+
+## Configuration
+
+`~/.config/mdv-second-brain/config.json` (override with `MDV_SECOND_BRAIN_CONFIG`). It stays on your machine and is never part of a vault.
+
+```json
+{
+  "root": "~/Documents/SecondBrain",
+  "git": { "mode": "per-workspace" },
+  "defaults": { "language": "auto" },
+  "stopThresholdMinutes": 0,
+  "budgets": { "hub": 4000, "note": 8000, "state": 600, "log": 6000, "memory": 8000, "decisions": 8000, "checkpoint": 600 },
+  "archiveAfterDays": 14,
+  "dailyInboxDays": 7,
+  "capturePatterns": ["docs/superpowers/specs/", "docs/superpowers/plans/"],
+  "workspaces": {
+    "<name>": {
+      "paths": ["<folder mapped to this workspace>"],
+      "vault": "<optional custom vault path>",
+      "language": "<language code>",
+      "board": "00_Inbox/Plan.md",
+      "git": { "mode": "per-workspace", "config": { "include.path": "<relative path to a .gitconfig>" } }
+    }
+  },
+  "ignore": ["<folders the plugin must never touch>"]
+}
+```
+
+- `git.mode`: `per-workspace` (one repo per vault), `single` (the root is one repo), `none`, `host` (commit into the repo that contains the vault).
+- `git.config`: local git settings applied to the vault repo before every commit — use it to commit with the identity of that workspace. Global git config is never changed.
+- `language: auto`: the vault language is fixed from your chat language at activation.
+
+## Vault
+
+```
+Home.md  AGENTS.md  WORKFLOW.md  TOOLS.md  DECISIONS.md  MEMORY.md
+00_Inbox/
+  Plan.md  Bugs.md  Features.md  Ideas.md      board, generated indexes, undecided ideas
+  Daily/YYYY-MM-DD.md                          one section per session
+  <project>/                                   only for a project you split off
+10_Notes/
+  Features/  Tasks/  Issues/                   work without a project
+  <note>.md                                    knowledge that spans projects
+20_Projects/<project>/
+  <project>.md                                 hub: what the project is now
+  <project> — <Topic>.md                       distilled knowledge
+  <project> — Post Mortem YYYY-MM-DD.md
+  Features/  Tasks/  Issues/
+80_Assets/
+90_Archive/                                    mirrors the original paths
+secrets.local.md  *.local.md  .brain/          never committed
+```
+
+The board has four lanes — ToDo, In Progress, Completed, Discarded — and the board wins: drag a card in Obsidian and the note's status follows. Notes are never deleted; deleting moves them to `90_Archive/`. `AGENTS.md`, `WORKFLOW.md` and `TOOLS.md` are generated once and then belong to you: Claude reads them and follows them.
+
+## Commands
+
+`/brain <command>` or plain language. The CLI is `node scripts/brain.js`.
+
+| Command | What it does |
+|---|---|
+| `brain init [<ws>] [--quick] [--path] [--vault] [--git-mode] [--identity] [--language]` | activate a folder; `--plan` prints what the guided questions need |
+| `brain attach <ws>` / `brain detach` | turn the brain on or off for the current chat only |
+| `brain task add "<Name>" [--project] [--feature] [--status]` | new task note + card (same subcommands for `issue`) |
+| `brain task list` · `show` · `move` · `block` · `unblock` · `done` · `discard` · `delete --yes` · `sync` | manage tasks and issues |
+| `brain feature add "<Name>"` · `brain project add <p>` · `brain postmortem add "<title>"` | create notes from the templates |
+| `brain idea add` · `list` · `promote <id> --to "<Name>"` · `discard <id>` | ideas |
+| `brain context` · `brain search "<text>"` | bounded reads |
+| `brain project list` · `split <p>` · `merge <p>` | give a project its own board and indexes, or fold it back |
+| `brain secret set` · `get` · `list` | values in `secrets.local.md`, referenced as `{{secret:KEY}}` |
+| `brain workspace add` · `list` · `map` · `ignore` | edit the config |
+| `brain index` · `brain commit -m "<msg>"` · `brain status` | archive, rebuild indexes, commit the vault |
+
+## Privacy
+
+- Nothing personal ships with the plugin: no paths, names or identities. Your configuration lives in `~/.config/mdv-second-brain/`.
+- Secrets go only in `secrets.local.md`; other `*.local.md` files hold private prose. Both are gitignored, and every commit is scanned for keys and passwords first.
+- The plugin never pushes.

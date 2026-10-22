@@ -35,5 +35,5 @@ test('defaultRoot prefers Documents', () => {
 });
 
 test('normalize lower-cases only on win32', { skip: process.platform !== 'win32' }, () => {
-  assert.equal(normalize('C:\\Users\\X\\'), normalize('c:/users/x'));
+  assert.equal(normalize('C:\\Data\\X\\'), normalize('c:/data/x'));
 });

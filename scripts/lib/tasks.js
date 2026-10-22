@@ -302,7 +302,7 @@ function addProjectHub(ctx, raw, { summary } = {}) {
   if (existing) throw nameTaken(p, existing);
   const file = require('./projects').hubFile(ctx.vault, p);
   const day = today(ctx);
-  const data = { type: 'project', status: 'active', depends_on: [], used_by: [], source_of: [], related: [], created: day, updated: day };
+  const data = { type: 'project', status: 'active', depends_on: [], used_by: [], source_of: [], built_from: [], related: [], created: day, updated: day };
   const body = templates.fill(templates.load(ctx.lang, 'project.md'), { title: p, summary: summary || '—' });
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, frontmatter.stringify(data, body));

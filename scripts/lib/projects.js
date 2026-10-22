@@ -4,6 +4,8 @@
 // the folder (20_Projects/<p>/<p>.md): it is still read, and `index` moves it out.
 const fs = require('node:fs');
 const path = require('node:path');
+const frontmatter = require('./frontmatter');
+const { projectName, unwrapLink, ymd } = require('./names');
 
 const ROOT = '20_Projects';
 
@@ -62,4 +64,43 @@ function migrateHubs(vault) {
 // Projects with a hub in both places: migrateHubs leaves them alone, the user keeps one.
 const hubConflicts = (vault) => projectNames(vault).filter((p) => fs.existsSync(hubFile(vault, p)) && fs.existsSync(legacyHubFile(vault, p)));
 
-module.exports = { ROOT, projectsRoot, projectDir, hubFile, legacyHubFile, relHub, findHub, projectNames, projectsWithHub, migrateHubs, hubConflicts };
+// Relation lists in the hub frontmatter ("[[project]]" items), each with the key the other hub gets.
+const RELATIONS = { depends_on: 'used_by', used_by: 'depends_on', source_of: 'built_from', built_from: 'source_of', related: 'related' };
+
+// The project's name as its hub spells it.
+function hubName(vault, raw) {
+  const want = projectName(raw).toLowerCase();
+  const p = projectsWithHub(vault).find((n) => n.toLowerCase() === want);
+  if (!p) throw Object.assign(new Error('no-hub'), { project: projectName(raw) });
+  return p;
+}
+
+const linked = (list, p) => list.some((v) => (unwrapLink(v) || '').toLowerCase() === p.toLowerCase());
+
+function relations(vault, p) {
+  const { data } = frontmatter.parse(fs.readFileSync(findHub(vault, p), 'utf8'));
+  const out = {};
+  for (const k of Object.keys(RELATIONS)) out[k] = Array.isArray(data[k]) ? data[k] : data[k] ? [data[k]] : [];
+  return out;
+}
+
+function setRelation(vault, p, key, other, remove, day) {
+  const list = relations(vault, p)[key];
+  if (remove !== linked(list, other)) return false;
+  const next = remove ? list.filter((v) => (unwrapLink(v) || '').toLowerCase() !== other.toLowerCase()) : [...list, `[[${other}]]`];
+  const file = findHub(vault, p);
+  fs.writeFileSync(file, frontmatter.setKeys(fs.readFileSync(file, 'utf8'), { [key]: next, updated: day }));
+  return true;
+}
+
+// a <rel> b, and b <inverse> a: both hubs always agree.
+function relate(vault, rawA, rel, rawB, { remove = false, day = ymd() } = {}) {
+  if (!RELATIONS[rel]) throw new Error('bad-relation');
+  const a = hubName(vault, rawA);
+  const b = hubName(vault, rawB);
+  if (a === b) throw new Error('bad-relation');
+  const changed = [setRelation(vault, a, rel, b, remove, day), setRelation(vault, b, RELATIONS[rel], a, remove, day)].some(Boolean);
+  return { a, rel, b, removed: remove, changed };
+}
+
+module.exports = { ROOT, RELATIONS, projectsRoot, projectDir, hubFile, legacyHubFile, relHub, findHub, projectNames, projectsWithHub, migrateHubs, hubConflicts, hubName, relations, relate };

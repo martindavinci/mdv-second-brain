@@ -91,7 +91,7 @@ test('cli project add creates the hub from the template, once', async () => {
   assert.equal(await main(['--config', cfgFile, 'project', 'add', 'alpha'], { cwd: code, ...io() }), 0);
   const hub = join(v, '20_Projects', 'alpha.md');
   assert.ok(!fs.existsSync(join(v, '20_Projects', 'alpha')), 'no project folder until there is something to put in it');
-  assert.match(read(hub), /^---\ntype: project\nstatus: active\ndepends_on: \[\]\nused_by: \[\]\nsource_of: \[\]\nrelated: \[\]/);
+  assert.match(read(hub), /^---\ntype: project\nstatus: active\ndepends_on: \[\]\nused_by: \[\]\nsource_of: \[\]\nbuilt_from: \[\]\nrelated: \[\]/);
   assert.match(read(hub), /<!-- brain:project-index -->/);
   const o = io();
   assert.equal(await main(['--config', cfgFile, 'project', 'add', 'alpha'], { cwd: code, ...o }), 6);

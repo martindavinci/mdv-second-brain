@@ -12,7 +12,7 @@ const { resolveWorkspace, projectFor } = require('./lib/resolve');
 const { projectName } = require('./lib/names');
 const { locate, folderConfigFile, LOCAL_VAULT } = require('./lib/locate');
 
-const BOOL = new Set(['json', 'yes', 'blocked', 'open', 'quick', 'apply', 'archive', 'plan', 'here', 'config-here']);
+const BOOL = new Set(['json', 'yes', 'blocked', 'open', 'quick', 'apply', 'archive', 'plan', 'here', 'config-here', 'remove', 'dry-run']);
 const GIT_MODES = ['per-workspace', 'single', 'none', 'host'];
 
 function parseArgs(argv) {
@@ -410,6 +410,17 @@ function cmdProject(env, sub, args) {
       const rows = [...names].sort().map((n) => ({ name: n, split: boards.isSplit(ctx, n), hub: home.hubs(ctx.vault).includes(n) }));
       return out(env, rows, rows.length ? rows.map((r) => `- ${r.name} — split: ${r.split ? 'yes' : 'no'}, hub: ${r.hub ? 'yes' : 'no'}`).join('\n') : 'no projects');
     }
+    case 'relate': {
+      const projects = require('./lib/projects');
+      const flagOf = (k) => k.replace('_', '-');
+      const given = Object.keys(projects.RELATIONS).filter((k) => str(env.flags[flagOf(k)]));
+      if (given.length !== 1) throw new CliError(2, 'usage: brain project relate <a> --depends-on|--used-by|--source-of|--built-from|--related <b> [--remove]');
+      const rel = given[0];
+      const r = projects.relate(ctx.vault, requireArg(args.join(' '), 'project'), rel, str(env.flags[flagOf(rel)]), { remove: !!env.flags.remove });
+      state.markCliWrite(ctx.vault, ctx.sid);
+      const side = `${r.a} ${rel} ${r.b}, ${r.b} ${projects.RELATIONS[rel]} ${r.a}`;
+      return out(env, r, r.changed ? `${r.removed ? 'removed' : 'related'}: ${side}` : `unchanged: ${side}`);
+    }
     case 'split':
     case 'merge': {
       const p = requireArg(args[0], 'project');
@@ -599,6 +610,8 @@ const ERRORS = {
   'invalid-workspace-name': () => new CliError(2, 'invalid workspace name: letters, digits, - and _'),
   'invalid-secret-key': () => new CliError(2, 'invalid secret key: use UPPER_SNAKE_CASE'),
   'reserved-name': () => new CliError(2, 'reserved or empty project name'),
+  'no-hub': (e) => new CliError(2, `no hub for project ${e.project}: brain project add ${e.project}`),
+  'bad-relation': () => new CliError(2, 'a relation links two different projects: --depends-on | --used-by | --source-of | --built-from | --related'),
   'already-split': () => new CliError(2, 'project already split'),
   'not-split': () => new CliError(2, 'project is not split'),
   'vault-overlap': (e) => new CliError(2, `vault overlaps workspace ${e.other}: each workspace needs its own folder`),

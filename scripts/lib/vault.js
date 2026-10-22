@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const git = require('./git');
 const templates = require('./templates');
+const { emptyBoard } = require('./board');
 const { normalize, isInside } = require('./paths');
 const { vaultPathFor, boardPathFor, saveConfig } = require('./config');
 
@@ -17,11 +18,6 @@ const GITATTRIBUTES = [
 const DIRS = ['00_Inbox', '00_Inbox/Daily', '10_Notes', '10_Notes/Features', '10_Notes/Tasks', '10_Notes/Issues', '20_Projects', '80_Assets', '90_Archive', '90_Archive/Daily', '.brain/state'];
 const ROOT_FILES = ['AGENTS.md', 'WORKFLOW.md', 'TOOLS.md', 'DECISIONS.md', 'MEMORY.md', 'Home.md'];
 
-// Replaced by board.emptyBoard() once the board module exists.
-let emptyBoard = () => '---\n\nkanban-plugin: board\n\n---\n\n## ToDo\n\n## In Progress\n\n## Completed\n\n## Discarded\n\n%% kanban:settings\n```\n{"kanban-plugin":"board"}\n```\n%%\n';
-try {
-  emptyBoard = require('./board').emptyBoard;
-} catch {}
 
 const wsOf = (cfg, name) => cfg.workspaces[name] || {};
 

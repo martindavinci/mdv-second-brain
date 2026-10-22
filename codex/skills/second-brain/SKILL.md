@@ -22,19 +22,20 @@ Outside a workspace the plugin is inert until the user asks.
   For "only this chat" never map the folder: a new workspace is `brain workspace add <ws> --language <code> [--vault <dir>]`, then `brain attach <ws>`.
 - Quick ("attiva brain con i default", `/brain init --quick` or `$second-brain init --quick`): `brain init --quick --language <code>`, no questions.
 - Off for this chat ("disattiva brain"): `brain detach`.
-Finish with the single line the CLI prints. The workspace context arrives with the next message.
+Finish with the single line the CLI prints.
 `init` exit 8 (sandbox cannot write the config): give the user the ways out it lists; `--config-here` only if they pick it.
 Config: only `brain init`/`brain workspace …`, as the user asks; never hand-edit it or drop a setting (e.g. `ignore`) unasked.
+Bootstrap (`/brain bootstrap`, "importa le repo", or `brain status` shows `repos:`): follow `bootstrap.md` next to this file.
 
 ## While you work (level 1, no commit)
-- Your daily section: update it only with `brain checkpoint --status "<where we are>" --next "<next step>" --open "<open points>" --log "<what just happened>"` (any subset; ≤ 600 chars in all). Never edit the daily file by hand: other sessions write to it too. Do it on your own at each meaningful step, so the Stop reminder stays rare.
+- Your daily section: update it only with `brain checkpoint --status "<where we are>" --next "<next step>" --open "<open points>" --log "<what just happened>"` (any subset; ≤ 600 chars in all). Never edit the daily file by hand. Do it on your own at each meaningful step, so the Stop reminder stays rare.
 - Active task or issue: keep `## Status` (≤ 600 chars, rewrite), TODO checkboxes and `## Log` (append) current.
 - Changelog-worthy work (new feature, behaviour change, relevant refactor) → always `brain task add "<Name>" [--feature "<Feature>"]`, then `brain task move "<Name>" in-progress`, and `brain task done "<Name>"` at the end.
 - Actionable bug or problem → always `brain issue add "<Name>"`. One ordinary bug = one issue, no duplicate task. Unconfirmed observations stay in the daily log.
 - Questions, reads, exploration and trivial touch-ups create nothing.
 - `name taken` → pick a more specific name yourself (e.g. `Payments — Refunds`), never ask.
 - Ideas (the user says idea, "sarebbe bello", "più avanti", or postpones a proposal) → `brain idea add "<text>"`, never a card. Decided → `brain task add …` then `brain idea promote <id> --to "<Name>"`; dropped → `brain idea discard <id>`.
-- Spec or plan files written in chat: summarise them into the feature note (summary, rules, open decisions, sources with the path) and TODOs into the task; never a full copy.
+- Spec or plan files written in chat → summary in the feature note (with the path), TODOs in the task; never a full copy.
 
 ## When a piece is done (level 2)
 Triggers: task completed, bug fixed, decision taken, the user says a part is finished, `/brain distill` or `$second-brain distill`.
@@ -49,7 +50,7 @@ Triggers: task completed, bug fixed, decision taken, the user says a part is fin
 Cards never point to features: when `brain task sync` reports cards on features, turn each into a task.
 
 ## Reading (context budget)
-Orient with `brain context`, then `brain show "<Name>" --section <heading> --max-chars 2000` (any note), then `brain search "<text>" [--project <p>] [--type task|issue|feature|note]`; add `--archive` only when the user asks about old work. Never read Home.md, generated indexes, whole dailies or `90_Archive/` to orient. Files reported `oversize:` → distil them: rewrite current truth, group `MEMORY.md` lines into loose notes.
+Orient with `brain context`, then `brain show "<Name>" --section <heading> --max-chars 2000`, then `brain search "<text>" [--project <p>] [--type task|issue|feature|note]`; add `--archive` only when the user asks about old work. Never read Home.md, generated indexes, whole dailies or `90_Archive/` to orient. Files reported `oversize:` → distil them: rewrite current truth, group `MEMORY.md` lines into loose notes.
 
 ## Rules
 - Read the vault's AGENTS.md, WORKFLOW.md and TOOLS.md once per context before your first write there; they override this skill.
@@ -60,9 +61,9 @@ Orient with `brain context`, then `brain show "<Name>" --section <heading> --max
 - Never interrupt a task to ask. Queue questions and ask once at the end; meanwhile use a sensible default and note it.
 - Silent: at most one line about the brain at the end of a reply, and only after a distillation or a commit.
 - Secrets: `brain secret set KEY value`, then write `{{secret:KEY}}` in notes; private prose goes in `<note>.local.md`. `brain commit` exit 5 means a secret was found: move it to `secrets.local.md`, put the placeholder, commit again, say so in one line at the end.
-- Project relations (`depends_on`, `used_by`, `source_of`, `related` in the hub) only when the work confirms them.
-- Never split or merge a project on your own: `brain project split <p>` / `brain project merge <p>` only when the user asks.
+- Project relations only with `brain project relate`, when the work confirms them.
+- Never split, merge or rename a project on your own: `brain project split|merge|rename` only when the user asks.
 - Never touch the coding agent's own memory files (Claude Code memory, Codex memories).
 
 ## Commands
-`checkpoint`, `show`, `task|issue add|list|show|move|block|unblock|done|discard|delete`, `task sync`, `feature add`, `idea add|list|promote|discard`, `context`, `search`, `project add|list|split|merge`, `postmortem add`, `index`, `commit -m`, `status`, `secret set|get|list`, `workspace add|list|map|ignore`, `init`, `attach`, `detach`, `adopt <path> --as <ws>` (dry run; `--apply` only after the user confirms the plan).
+`checkpoint`, `show`, `task|issue add|list|show|move|block|unblock|done|discard|delete`, `task sync`, `feature add`, `idea add|list|promote|discard`, `context`, `search`, `project add|list|rename|relate|split|merge`, `bootstrap [--dry-run]`, `postmortem add`, `index`, `commit -m`, `status`, `secret set|get|list`, `workspace add|list|map|ignore`, `init`, `attach`, `detach`, `adopt <path> --as <ws>` (dry run; `--apply` only after the user confirms the plan).

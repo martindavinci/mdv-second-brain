@@ -211,6 +211,14 @@ test('the Codex skill is the Claude skill with only the CLI line changed', () =>
   assert.ok(codex.body.length <= 8000, String(codex.body.length));
 });
 
+test('the bootstrap procedure ships with both skills and the skill points to it', () => {
+  assert.equal(read('codex/skills/second-brain/bootstrap.md'), read('skills/second-brain/bootstrap.md'));
+  const proc = read('skills/second-brain/bootstrap.md');
+  for (const s of ['bootstrap --dry-run', 'brain project rename', 'brain project relate', 'Brief', 'secret']) assert.ok(proc.includes(s), s);
+  for (const f of ['skills/second-brain/SKILL.md', 'codex/skills/second-brain/SKILL.md']) assert.match(frontmatter.parse(read(f)).body, /bootstrap\.md/, f);
+  assert.match(read('commands/brain.md'), /bootstrap/);
+});
+
 test('the shared skill text names the Codex invocations and question tool too', () => {
   const body = frontmatter.parse(read('codex/skills/second-brain/SKILL.md')).body;
   for (const s of ['$second-brain init', '$second-brain init --quick', '$second-brain distill', 'request_user_input']) assert.ok(body.includes(s), s);

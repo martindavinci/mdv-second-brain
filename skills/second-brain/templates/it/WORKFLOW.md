@@ -19,6 +19,9 @@ Domande, letture, esplorazione e ritocchi banali non creano nulla.
 | Decisione stabile | una riga in `DECISIONS.md` + dettagli nella nota linkata |
 | Lavoro in corso | checkpoint (Stato / Next / Aperto) della tua sezione di sessione nella daily |
 
+## Hub di progetto
+`20_Projects/<progetto>.md`: riepilogo di 2–4 frasi, poi solo le sezioni con contenuto reale tra Stack, Struttura, Build / run / release (o Workflow), Convenzioni, Gotcha, Stato. `## Repo` è generato da `brain bootstrap`: non modificarlo.
+
 ## Flusso bug
 sintomo → repro → evidenze → causa (candidata, poi confermata) → fix → checklist di verifica → lezione nella feature.
 

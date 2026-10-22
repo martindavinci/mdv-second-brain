@@ -56,6 +56,8 @@ In the folder you work in, say **"attiva brain per questa chat"** / **"enable th
 
 `/brain init --quick` (`$second-brain init --quick` in Codex) uses the defaults without questions. "disattiva brain per questa chat" (`brain detach`) turns it off for the current chat.
 
+A folder full of repos? `/brain bootstrap` gives each git repo directly under the workspace's folders a project hub. The CLI does the facts: a generated `## Repo` section (remotes without credentials, branch, commits, last commit, tag, working tree, manifests), refreshed on every run, and the vault, ignored folders and other workspaces left out. The agent writes the prose, with subagents when there are many repos. Relations come as candidates with their evidence (`x-src` next to `x`, a remote pointing to a sibling folder, `../sibling` in scripts, a shared first commit) and are written only once confirmed; references to sibling folders that no longer exist are reported. Run it again after adding or renaming repos: a renamed folder is recognised by its first commit or remote and proposed as a project rename, applied only after you confirm. `brain status` says when there are repos without a hub.
+
 ## Storage layouts
 
 - **One root for everything** (default): `<root>/<workspace>/` for every workspace, with `root` = `~/Documents/SecondBrain` (or `~/SecondBrain`).
@@ -137,10 +139,13 @@ The board has four lanes — ToDo, In Progress, Completed, Discarded — and the
 | `brain idea add` · `list` · `promote <id> --to "<Name>"` · `discard <id>` | ideas |
 | `brain context` · `brain show "<Name>" [--section <heading>] [--max-chars]` · `brain search "<text>"` | bounded reads |
 | `brain project list` · `split <p>` · `merge <p>` | give a project its own board and indexes, or fold it back |
+| `brain bootstrap [--dry-run]` | a hub for every git repo under the workspace's folders, `## Repo` refreshed on each run; renames, relation candidates and broken sibling references reported |
+| `brain project rename <old> <new> [--dry-run]` | move the hub, folder, topic notes, split board and archive; rewrite links, `project:` fields and idea headings |
+| `brain project relate <a> --depends-on\|--used-by\|--source-of\|--built-from\|--related <b> [--remove]` | a relation written in both hubs (`used_by` is the other side of `depends_on`, `built_from` of `source_of`) |
 | `brain secret set` · `get` · `list` | values in `secrets.local.md`, referenced as `{{secret:KEY}}` |
 | `brain workspace add` · `list` · `map` · `ignore` | edit the config |
 | `brain checkpoint --status … --next … --open … --log …` | update this session's section of the daily (safe with parallel sessions) |
-| `brain index` · `brain commit -m "<msg>"` · `brain status` | archive, rebuild indexes, prune old session state, commit the vault |
+| `brain index` · `brain commit -m "<msg>"` · `brain status` | archive, rebuild indexes, move old-layout hubs to `20_Projects/<project>.md`, prune old session state, commit the vault; status also counts repos without a hub |
 | `brain adopt <path> --as <ws> [--apply] [--language]` | adopt an existing vault in place: dry run first, files moved (never copied or deleted), path links rewritten, a `TASKS.md` checklist turned into cards |
 
 ## Privacy

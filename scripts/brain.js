@@ -433,6 +433,22 @@ function cmdProject(env, sub, args) {
   }
 }
 
+// The repos under the workspace's folders become project hubs; re-runnable, never touches a hub's prose.
+function cmdBootstrap(env) {
+  if (env.cfg.local) throw new CliError(2, 'project mode: this folder is one project; bootstrap maps the repos of a workspace');
+  const repos = require('./lib/repos');
+  const { name, ctx } = workspaceCtx(env);
+  const dryRun = !!env.flags['dry-run'];
+  const p = repos.plan(env.cfg, name, ctx);
+  const done = dryRun ? { created: [], refreshed: [] } : repos.apply(ctx, p);
+  if (!dryRun) {
+    runIndex(env, ctx);
+    state.markCliWrite(ctx.vault, ctx.sid);
+  }
+  const value = { dryRun, ...done, repos: p.repos.map(({ dir, base, ...r }) => r), renames: p.renames, orphans: p.orphans, candidates: p.candidates, broken: p.broken };
+  return out(env, value, repos.describe(p, { dryRun }));
+}
+
 function cmdPostmortem(env, sub, args) {
   if (sub !== 'add') throw new CliError(2, 'usage: brain postmortem add <title…> [--project <p>]');
   const { name: ws, ctx } = workspaceCtx(env);
@@ -667,6 +683,9 @@ async function main(argv, io = {}) {
         break;
       case 'postmortem':
         locked(env, () => cmdPostmortem(env, sub, rest));
+        break;
+      case 'bootstrap':
+        locked(env, () => cmdBootstrap(env));
         break;
       case 'adopt':
         cmdAdopt(env, args);

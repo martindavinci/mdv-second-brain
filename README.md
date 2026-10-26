@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/icon.png" alt="mdv-second-brain: a Leonardo-style thinking machine" width="240">
+</p>
+
 # mdv-second-brain
 
 A Claude Code and Codex plugin that keeps an Obsidian-compatible **second brain** for each workspace while you work: a Kanban board whose cards link to living task and issue notes, a daily note with the state of every session, distilled project knowledge, ideas, decisions and post mortems — written by Claude, without you asking, and without mixing workspaces.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 — 2026-10-26
+
+- `brain bootstrap` no longer reports README examples or test fixtures as broken references to sibling folders; test and fixture folders are not scanned.
+- `brain bootstrap` keeps a repo git cannot read (owned by another account) as it was, reports a second repo with the same name instead of merging it, and takes no optional lock in your repos. Remotes keep spaces in paths and drop passwords that contain an `@`.
+- `brain project rename` never overwrites: the new name must be free in `20_Projects`, `00_Inbox` and `90_Archive` in any case, and a move that fails half way is undone. Hidden folders move with the project, and a project without a hub takes its tasks along.
+- README: plugin icon.
+
 ## 0.3.0 — 2026-10-22
 
 - **`brain bootstrap [--dry-run]`**: every git repo directly under the workspace's folders gets a project hub with a generated `## Repo` section (remotes without credentials, branch, commits, last commit, tag, working tree, manifests), refreshed on each run. Excluded folders, names taken by other notes, relation candidates with their evidence and references to sibling folders that no longer exist are reported. Re-runnable after adding or renaming repos; the agent writes the prose (procedure in `skills/second-brain/bootstrap.md`).

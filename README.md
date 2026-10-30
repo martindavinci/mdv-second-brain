@@ -164,6 +164,7 @@ The board has four lanes — ToDo, In Progress, Completed, Discarded — and the
 - Nothing personal ships with the plugin: no paths, names or identities. Your configuration lives in `~/.config/mdv-second-brain/`.
 - Secrets go only in `secrets.local.md`; other `*.local.md` files hold private prose. Both are gitignored, and every commit is scanned for keys and passwords first.
 - The plugin never pushes.
+- At session start in Claude Code it reads `~/.claude/settings.json`, the project's `.claude/settings*.json` and the `hooks/hooks.json` of installed plugins, only to notice other vault tooling (Obsidian, vault or second-brain hooks) that also injects a manual; it then tells the model that the vault's own rules govern. It changes nothing there and sends nothing anywhere.
 
 ## License
 

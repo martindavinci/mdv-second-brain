@@ -42,6 +42,8 @@ function projectBlock({ project, projectNoteExists, relatedHints, inProgress }) 
 
 function buildSessionContext(o) {
   const blocks = [head(o), projectBlock(o)];
+  // second, so it survives the cap
+  if (o.others && o.others.length) blocks.splice(1, 0, `other vault tooling also injects context at session start: ${o.others.join(', ')}. Where it describes this vault differently, the vault's AGENTS.md, WORKFLOW.md and TOOLS.md govern every write.`);
   if (o.lastState) blocks.push(`last session checkpoint:\n${o.lastState}`);
   if (o.oversize && o.oversize.length) blocks.push(o.oversize.map((x) => `oversize: ${x.file} (${x.chars}/${x.budget}) — distil it`).join('\n'));
   let text = blocks.join('\n\n');

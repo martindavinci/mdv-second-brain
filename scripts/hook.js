@@ -54,6 +54,8 @@ function sessionContext(env, ws, sid, cwd) {
   o.dailyFile = dailyFile;
   o.projectNoteExists = !!o.project && !!require('./lib/projects').findHub(v, o.project);
   o.relatedHints = o.project && !o.projectNoteExists && r.mappedDir ? relatedCandidates(r.mappedDir, raw) : [];
+  // Codex runs none of Claude Code's plugins or settings hooks
+  if (env.host !== 'codex') o.others = require('./lib/neighbours').find({ home: env.home, cwd });
   return buildSessionContext(o);
 }
 
@@ -189,7 +191,7 @@ function run(event, input, opts = {}) {
     if (!input || typeof input !== 'object') throw new Error('bad-input: hook stdin is not a JSON object');
     // a project's own config is not where the CLI looks by default from every folder: name it in the CLI line
     const cliConfig = isLocalFile(cfgFile) && !samePath(cfgFile, globalFile) ? cfgFile : null;
-    const env = { now: opts.now || new Date(), cli: opts.cli || DEFAULT_CLI, cliConfig, cfgFile, stateDir: path.join(configDir, 'state') };
+    const env = { now: opts.now || new Date(), cli: opts.cli || DEFAULT_CLI, cliConfig, cfgFile, stateDir: path.join(configDir, 'state'), home: opts.home || os.homedir(), host: opts.host || 'claude' };
     return { stdout: handle(event, input, env) || '' };
   } catch (e) {
     try {
@@ -216,7 +218,7 @@ function main(argEvent) {
   try {
     // always read the event: the project config is found from its cwd, and leaving stdin unread fails the hook
     const input = readStdin();
-    out = run(argEvent || (input && EVENTS[input.hook_event_name]), input).stdout;
+    out = run(argEvent || (input && EVENTS[input.hook_event_name]), input, { host: argEvent ? 'claude' : 'codex' }).stdout;
   } catch {}
   if (out) process.stdout.write(out);
   process.exitCode = 0;

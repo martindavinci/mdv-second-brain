@@ -216,6 +216,35 @@ function siblingRefs(r) {
 
 // --- the plan ---
 
+// Commits whose subject says a direction was taken ("switch to", "replace X with Y", "in favour of"…): decisions made
+// in code that never reached DECISIONS.md. Candidates only; one already written there (its hash cited) is skipped.
+const DECISION = /\b(switch(e[ds]|ing)?\b.*\b(to|from)\b|mov(e[ds]?|ing) away from|migrat(e[ds]?|ing|ion)\b.*\b(to|from)\b|replac(e[ds]?|ing)\b.*\bwith\b|drop(s|ped|ping)? (support|the \S+ (dependency|library|backend))|deprecat|remov(e[ds]?|ing) support|instead of|in favou?r of|decid(e[ds]?|ing)\b|BREAKING CHANGE|passa(t[oi])? a\b|migra\b.*\ba\b|sostitui|invece d[ie]|al posto d[ie]|abbandon)/i;
+const ROUTINE = /^(docs|test|tests|chore|style)(\([^)]*\))?!?:/i;
+const MAX_COMMITS = 200;
+const MAX_DECISIONS = 8;
+
+function decisionsWritten(vault) {
+  let text = '';
+  for (const f of ['DECISIONS.md', path.join('90_Archive', 'Decisions Archive.md')]) {
+    try {
+      text += fs.readFileSync(path.join(vault, f), 'utf8');
+    } catch {}
+  }
+  return text;
+}
+
+function decisions(r, written) {
+  const log = tryGit(r.dir, ['log', '--no-merges', `-${MAX_COMMITS}`, '--format=%h%x09%cs%x09%s']) || '';
+  const out = [];
+  for (const line of log.split('\n')) {
+    const [hash, date, subject] = line.split('\t');
+    if (!subject || ROUTINE.test(subject) || !DECISION.test(subject) || written.includes(hash)) continue;
+    out.push({ project: r.project, hash, date, subject });
+    if (out.length >= MAX_DECISIONS) break;
+  }
+  return out;
+}
+
 const pairKey = (a, b) => [a.toLowerCase(), b.toLowerCase()].sort().join('\u0000');
 
 // Relations already in either hub are not proposed again.
@@ -319,7 +348,9 @@ function plan(cfg, ws, ctx) {
   }
   const readable = live.filter((r) => r.facts);
   const { proposals, orphans } = renames(ctx.vault, readRecord(ctx.vault), live);
-  return { repos, renames: proposals, orphans, candidates: candidates(ctx.vault, readable.filter((r) => r.status !== 'name-taken')), broken };
+  const written = decisionsWritten(ctx.vault);
+  const hubbed = readable.filter((r) => r.status === 'new' || r.status === 'existing');
+  return { repos, renames: proposals, orphans, candidates: candidates(ctx.vault, readable.filter((r) => r.status !== 'name-taken')), broken, decisions: hubbed.flatMap((r) => decisions(r, written)) };
 }
 
 // New hubs, every hub's Repo section regenerated, the record refreshed. A folder waiting for a rename stays out.
@@ -360,6 +391,7 @@ function describe(p, { dryRun }) {
   for (const x of p.renames) lines.push(`rename? ${x.from} → ${x.to} (same ${x.by}) — after the user confirms: brain project rename "${x.from}" "${x.to}"`);
   for (const o of p.orphans) lines.push(`orphan: ${o} — hub without its repo folder`);
   for (const c of p.candidates) lines.push(`relation? ${c.a} ${c.rel} ${c.b} — ${c.evidence}`);
+  for (const d of p.decisions || []) lines.push(`decision? ${d.project} ${d.hash} ${d.date} — ${d.subject}`);
   for (const b of p.broken) lines.push(`broken ref: ${b.project} ${b.file} → ${b.ref} (folder missing; to verify)`);
   return lines.join('\n');
 }

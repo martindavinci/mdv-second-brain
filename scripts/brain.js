@@ -454,7 +454,7 @@ function cmdBootstrap(env) {
     runIndex(env, ctx);
     state.markCliWrite(ctx.vault, ctx.sid);
   }
-  const value = { dryRun, ...done, repos: p.repos.map(({ dir, base, ...r }) => r), renames: p.renames, orphans: p.orphans, candidates: p.candidates, broken: p.broken };
+  const value = { dryRun, ...done, repos: p.repos.map(({ dir, base, ...r }) => r), renames: p.renames, orphans: p.orphans, candidates: p.candidates, broken: p.broken, decisions: p.decisions };
   return out(env, value, repos.describe(p, { dryRun }));
 }
 

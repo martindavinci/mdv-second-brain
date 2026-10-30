@@ -7,8 +7,9 @@ Follow this when the user asks to bootstrap the workspace (`/brain bootstrap`, `
 3. `brain --json bootstrap`: creates the missing hubs and regenerates the `## Repo` section of every hub (generated: never edit it by hand).
 4. Prose, only for the hubs in `created` (existing hubs keep theirs): up to 5 repos yourself; more → subagents in parallel, at most 5 repos each, with the brief below.
 5. Relations (`candidates`): read each evidence; confirm the true ones with `brain project relate <a> --<relation> <b>` (both hubs are updated), skip the doubtful ones. Never write relation lists by hand.
-6. Anomalies (`broken` references and what the subagents report): `brain issue add` only when actionable (for example a build that writes into a folder that no longer exists); the rest goes in the hub's Gotchas.
-7. `brain index`, then `brain commit -m "bootstrap: <n> projects"`.
+6. Decisions (`decisions`: commits whose subject says a direction was taken): list them for the user in one message; for each one they confirm, add a line to `DECISIONS.md`: `- <date> — <the choice, in the vault language> (<hash>) → [[<project>]]`. The hash keeps it from being proposed again; never write one the user did not confirm.
+7. Anomalies (`broken` references and what the subagents report): `brain issue add` only when actionable (for example a build that writes into a folder that no longer exists); the rest goes in the hub's Gotchas.
+8. `brain index`, then `brain commit -m "bootstrap: <n> projects"`.
 
 ## Brief for the subagents
 

@@ -204,3 +204,33 @@ test('a hub frontmatter stays readable after bootstrap', async () => {
   await w.brain('bootstrap');
   assert.equal(frontmatter.parse(read(w.hub('app'))).data.type, 'project');
 });
+
+test('bootstrap proposes decision-shaped commits as decisions, once, and never routine ones', async () => {
+  const w = await workspace();
+  const app = join(w.code, 'app');
+  const commit = (msg) => {
+    fs.appendFileSync(join(app, 'log.txt'), msg + '\n');
+    g(app, ['add', '-A']);
+    g(app, ['commit', '-q', '-m', msg]);
+    return g(app, ['log', '-1', '--format=%h']);
+  };
+  const sw = commit('refactor: switch the store to SQLite');
+  commit('fix: typo in the header');
+  const rep = commit('feat: replace moment with date-fns');
+  commit('docs: migrate the wiki to the README');
+  commit('chore: v1.2.0');
+  const it = commit('build: passa a pnpm al posto di npm');
+  const ins = commit('fix: drop passwords that contain an @');
+  const plan = (await w.brain('--json', 'bootstrap', '--dry-run')).json();
+  const mine = plan.decisions.filter((d) => d.project === 'app');
+  assert.deepEqual(mine.map((d) => d.hash), [it, rep, sw]);
+  assert.ok(!mine.some((d) => d.hash === ins));
+  assert.match(mine[0].date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(mine[2].subject, 'refactor: switch the store to SQLite');
+  assert.ok((await w.brain('bootstrap', '--dry-run')).text.includes(`decision? app ${sw} ${mine[2].date} — refactor: switch the store to SQLite`));
+
+  // a decision already written (with its hash) is not proposed again
+  fs.appendFileSync(join(w.vault, 'DECISIONS.md'), `\n- 2026-10-30 — SQLite store (${sw}) → [[app]]\n`);
+  const later = (await w.brain('--json', 'bootstrap', '--dry-run')).json();
+  assert.deepEqual(later.decisions.filter((d) => d.project === 'app').map((d) => d.hash), [it, rep]);
+});

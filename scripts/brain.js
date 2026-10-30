@@ -12,7 +12,7 @@ const { resolveWorkspace, projectFor } = require('./lib/resolve');
 const { projectName } = require('./lib/names');
 const { locate, folderConfigFile, LOCAL_VAULT } = require('./lib/locate');
 
-const BOOL = new Set(['json', 'yes', 'blocked', 'open', 'quick', 'apply', 'archive', 'plan', 'here', 'config-here', 'remove', 'dry-run']);
+const BOOL = new Set(['json', 'yes', 'blocked', 'open', 'quick', 'apply', 'archive', 'plan', 'here', 'config-here', 'remove', 'dry-run', 'fix']);
 const GIT_MODES = ['per-workspace', 'single', 'none', 'host'];
 
 function parseArgs(argv) {
@@ -478,6 +478,32 @@ async function cmdPlugins(env, args) {
   return out(env, r, lines.join('\n') || 'nothing to do');
 }
 
+// Broken links, orphans, stale in-progress items, missing frontmatter, duplicate names, empty folders.
+function cmdHealth(env) {
+  const { ctx } = workspaceCtx(env);
+  const fix = !!env.flags.fix;
+  const days = Number(str(env.flags.days) || 14);
+  const r = require('./lib/health').check(ctx, { fix, days: days > 0 ? days : 14 });
+  if (fix && (r.fixed.length || r.removedFolders.length)) state.markCliWrite(ctx.vault, ctx.sid);
+  const lines = [];
+  const block = (label, items, show = (x) => x) => {
+    if (!items.length) return;
+    lines.push(`${label}: ${items.length}`, ...items.slice(0, 20).map((x) => `- ${show(x)}`));
+    if (items.length > 20) lines.push(`+${items.length - 20} more (--json)`);
+  };
+  block('broken links', r.broken, (b) => `${b.file} → [[${b.target}]]${b.fix ? ` (fix: ${b.fix})` : b.candidates.length ? ` (one of: ${b.candidates.join(', ')})` : ''}`);
+  block('fixed links', r.fixed, (f) => `${f.file}: [[${f.target}]] → [[${f.to}]]`);
+  block(`in progress, untouched for over ${days} days`, r.stale, (s) => `${s.name}${s.project ? ` (${s.project})` : ''} — ${s.days} days`);
+  block('without frontmatter', r.noFrontmatter);
+  block('duplicate names', r.duplicates, (d) => `${d.name}: ${d.files.join(', ')}`);
+  block('empty folders', r.emptyFolders);
+  block('removed empty folders', r.removedFolders);
+  block('orphans (no note links to them)', r.orphans);
+  const fixable = r.broken.filter((b) => b.fix).length;
+  if (fixable || r.emptyFolders.length) lines.push(`→ brain health --fix repoints the ${fixable} links with one certain match and removes the ${r.emptyFolders.length} empty folders; the rest needs a decision`);
+  return out(env, r, lines.join('\n') || 'vault healthy');
+}
+
 function cmdPostmortem(env, sub, args) {
   if (sub !== 'add') throw new CliError(2, 'usage: brain postmortem add <title…> [--project <p>]');
   const { name: ws, ctx } = workspaceCtx(env);
@@ -674,7 +700,7 @@ const ERRORS = {
   'invalid-config': () => new CliError(2, `invalid config file: ${config.configPath()}`),
 };
 
-const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|checkpoint|context|show|search|project|postmortem|workspace|secret|plugins|index|commit|status|adopt> …';
+const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|checkpoint|context|show|search|project|postmortem|workspace|secret|plugins|health|index|commit|status|adopt> …';
 
 async function main(argv, io = {}) {
   const stdout = io.stdout || process.stdout;
@@ -727,6 +753,9 @@ async function main(argv, io = {}) {
         break;
       case 'plugins':
         await cmdPlugins(env, args);
+        break;
+      case 'health':
+        locked(env, () => cmdHealth(env));
         break;
       case 'adopt':
         cmdAdopt(env, args);

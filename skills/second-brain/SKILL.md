@@ -57,13 +57,13 @@ Orient with `brain context`, then `brain show "<Name>" --section <heading> --max
 - Never delete notes. `brain task delete "<Name>" --yes` archives, and only when the user asks. Feature notes, hubs and distilled notes are current truth: rewrite obsolete prose. Tasks, issues, post mortems, dailies, `DECISIONS.md`, `MEMORY.md`, `Ideas.md` are history: mark lines, never remove them.
 - Never touch user-written sections, generated files, or `<!-- brain:… -->` sections other than your own session section.
 - Isolation: the content of one workspace never mentions another workspace — no links, names or summaries, in the vault, in context or in replies — unless the user explicitly asks.
-- Subagents: when you delegate work that may write the vault, give the subagent your exact `cli:` line, `--session` included.
+- Subagents that may write the vault get your exact `cli:` line, `--session` included.
 - Never interrupt a task to ask. Queue questions and ask once at the end; meanwhile use a sensible default and note it.
 - Silent: at most one line about the brain at the end of a reply, and only after a distillation or a commit.
 - Secrets: `brain secret set KEY value`, then write `{{secret:KEY}}` in notes; private prose goes in `<note>.local.md`. `brain commit` exit 5 means a secret was found: move it to `secrets.local.md`, put the placeholder, commit again, say so in one line at the end.
 - Project relations only with `brain project relate`, when the work confirms them.
 - Never split, merge or rename a project on your own: `brain project split|merge|rename` only when the user asks.
-- Never touch the coding agent's own memory files (Claude Code memory, Codex memories).
+- Never touch the agent's own memory files (Claude Code memory, Codex memories).
 
 ## Commands
-`checkpoint`, `show`, `task|issue add|list|show|move|block|unblock|done|discard|delete`, `task sync`, `feature add`, `idea add|list|promote|discard`, `context`, `search`, `project add|list|rename|relate|split|merge`, `bootstrap [--dry-run]`, `plugins` (only when asked), `postmortem add`, `index`, `commit -m`, `status`, `secret set|get|list`, `workspace add|list|map|ignore`, `init`, `attach`, `detach`, `adopt <path> --as <ws>` (dry run; `--apply` only after the user confirms the plan).
+`checkpoint`, `show`, `task|issue add|list|show|move|block|unblock|done|discard|delete`, `task sync`, `feature add`, `idea add|list|promote|discard`, `context`, `search`, `project add|list|rename|relate|split|merge`, `bootstrap [--dry-run]`, `plugins` (only when asked), `health [--fix]`, `postmortem add`, `index`, `commit -m`, `status`, `secret set|get|list`, `workspace add|list|map|ignore`, `init`, `attach`, `detach`, `adopt <path> --as <ws>` (dry run; `--apply` only after the user confirms the plan).

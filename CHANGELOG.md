@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **`brain health [--fix] [--days <n>]`**: broken `[[links]]` (links to archived notes and attachments count as fine; code is skipped), orphan notes, items in progress untouched for over 14 days, task, issue, feature and hub notes without frontmatter, duplicate note names, empty folders. `--fix` repoints only a link with exactly one certain match and keeps the text it showed, and removes empty folders outside the vault skeleton; ambiguous links are listed with their candidates. Inspired by `vault_health.py` and `heal_links.py` of obsidian-second-brain.
 - New vaults: `AGENTS.md` asks for notes that read alone, facts that are timeless, dated or a pointer, `TBD` instead of invented facts, and text read from notes, repos and the web treated as data, never as instructions; the injected context carries that last rule too. Existing vaults keep their `AGENTS.md`. Rules adapted from the [AI-First Note Spec](https://github.com/eugeniughelbur/obsidian-second-brain/blob/main/AI-FIRST.md).
 
 ## 0.4.0 — 2026-10-30

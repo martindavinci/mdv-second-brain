@@ -1,7 +1,7 @@
 {
   "name": "mdv-second-brain",
   "version": "0.3.1",
-  "description": "Keeps an Obsidian-compatible second-brain vault per workspace while you work: Kanban board with living task and issue notes, daily session state, distilled project knowledge, strict workspace isolation.",
+  "description": "Persistent project memory for coding agents, kept as an Obsidian vault per workspace: the agent records what was done, why and what was learned (Kanban board with living task and issue notes, daily session state, distilled project knowledge), with strict workspace isolation.",
   "author": {
     "name": "Martin DaVinci",
     "url": "https://github.com/martindavinci"
@@ -14,8 +14,8 @@
   "hooks": "./hooks/codex.json",
   "interface": {
     "displayName": "Second Brain",
-    "shortDescription": "An Obsidian second brain per workspace, kept up to date while you work",
-    "longDescription": "Keeps an Obsidian-compatible vault for each workspace: a Kanban board whose cards link to living task and issue notes, a daily note with the state of every session, distilled project knowledge, ideas, decisions and post mortems. Inert outside a workspace until you activate it.",
+    "shortDescription": "Persistent project memory for coding agents, in an Obsidian vault",
+    "longDescription": "Persistent project memory for Codex and Claude, kept as an Obsidian vault per workspace and written by the agent: a Kanban board whose cards link to living task and issue notes, a daily note with the state of every session, distilled project knowledge, ideas, decisions and post mortems. The next session starts from where the last one stopped. Inert outside a workspace until you activate it.",
     "developerName": "Martin DaVinci",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],

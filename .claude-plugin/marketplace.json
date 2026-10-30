@@ -8,10 +8,10 @@
     {
       "name": "mdv-second-brain",
       "source": "./",
-      "description": "Keeps an Obsidian-compatible second-brain vault per workspace while you work.",
+      "description": "Persistent project memory for coding agents, kept as an Obsidian vault per workspace.",
       "homepage": "https://github.com/martindavinci/mdv-second-brain",
       "license": "MIT"
     }
   ],
-  "description": "Second brain for Claude Code (mdv-second-brain)."
+  "description": "Persistent project memory for coding agents (mdv-second-brain)."
 }

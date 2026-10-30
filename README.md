@@ -144,12 +144,13 @@ The board has four lanes — ToDo, In Progress, Completed, Discarded — and the
 | `brain context` · `brain show "<Name>" [--section <heading>] [--max-chars]` · `brain search "<text>"` | bounded reads |
 | `brain project list` · `split <p>` · `merge <p>` | give a project its own board and indexes, or fold it back |
 | `brain bootstrap [--dry-run]` | a hub for every git repo under the workspace's folders, `## Repo` refreshed on each run; renames, relation candidates and broken sibling references reported |
+| `brain plugins [<id>…] [--dry-run]` | install and enable Obsidian community plugins in the vault: Dataview, Kanban and Homepage (opens `Home.md`) by default, or the ids given; each from the release its repo's `manifest.json` names, as Obsidian does. Installed plugins and your `community-plugins.json` entries and `data.json` settings are kept |
 | `brain project rename <old> <new> [--dry-run]` | move the hub, folder, topic notes, split board and archive; rewrite links, `project:` fields and idea headings |
 | `brain project relate <a> --depends-on\|--used-by\|--source-of\|--built-from\|--related <b> [--remove]` | a relation written in both hubs (`used_by` is the other side of `depends_on`, `built_from` of `source_of`) |
 | `brain secret set` · `get` · `list` | values in `secrets.local.md`, referenced as `{{secret:KEY}}` |
 | `brain workspace add` · `list` · `map` · `ignore` | edit the config |
 | `brain checkpoint --status … --next … --open … --log …` | update this session's section of the daily (safe with parallel sessions) |
-| `brain index` · `brain commit -m "<msg>"` · `brain status` | archive, rebuild indexes, move old-layout hubs to `20_Projects/<project>.md`, prune old session state, commit the vault; status also counts repos without a hub |
+| `brain index` · `brain commit -m "<msg>"` · `brain status` | archive, rebuild indexes, move old-layout hubs to `20_Projects/<project>.md`, prune old session state, commit the vault; status also counts repos without a hub and names the plugins the vault needs that are missing |
 | `brain adopt <path> --as <ws> [--apply] [--language]` | adopt an existing vault in place: dry run first, files moved (never copied or deleted), path links rewritten, a `TASKS.md` checklist turned into cards |
 
 ## Privacy

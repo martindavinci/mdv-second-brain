@@ -66,4 +66,4 @@ Orient with `brain context`, then `brain show "<Name>" --section <heading> --max
 - Never touch the coding agent's own memory files (Claude Code memory, Codex memories).
 
 ## Commands
-`checkpoint`, `show`, `task|issue add|list|show|move|block|unblock|done|discard|delete`, `task sync`, `feature add`, `idea add|list|promote|discard`, `context`, `search`, `project add|list|rename|relate|split|merge`, `bootstrap [--dry-run]`, `postmortem add`, `index`, `commit -m`, `status`, `secret set|get|list`, `workspace add|list|map|ignore`, `init`, `attach`, `detach`, `adopt <path> --as <ws>` (dry run; `--apply` only after the user confirms the plan).
+`checkpoint`, `show`, `task|issue add|list|show|move|block|unblock|done|discard|delete`, `task sync`, `feature add`, `idea add|list|promote|discard`, `context`, `search`, `project add|list|rename|relate|split|merge`, `bootstrap [--dry-run]`, `plugins` (only when asked), `postmortem add`, `index`, `commit -m`, `status`, `secret set|get|list`, `workspace add|list|map|ignore`, `init`, `attach`, `detach`, `adopt <path> --as <ws>` (dry run; `--apply` only after the user confirms the plan).

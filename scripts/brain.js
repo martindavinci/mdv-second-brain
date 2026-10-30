@@ -458,6 +458,26 @@ function cmdBootstrap(env) {
   return out(env, value, repos.describe(p, { dryRun }));
 }
 
+// Obsidian community plugins for the vault: the ones its notes need by default, or the ids given.
+async function cmdPlugins(env, args) {
+  const plugins = require('./lib/plugins');
+  const { ctx } = workspaceCtx(env);
+  const ids = args.length ? args : plugins.DEFAULTS;
+  const say = (label, ids) => ids.length && `${label}: ${ids.join(', ')}`;
+  if (env.flags['dry-run']) {
+    const p = plugins.plan(ctx.vault, ids);
+    const lines = [say('would install', p.download), say('would enable', p.enable), say('already there', p.present), say('invalid ids', p.invalid)].filter(Boolean);
+    return out(env, { dryRun: true, ...p }, lines.join('\n') || 'nothing to do');
+  }
+  const r = await plugins.install(ctx.vault, ids, { fetch: env.fetch, lock: (fn) => require('./lib/lock').withLock(ctx.vault, fn) });
+  const changed = r.installed.length || r.enabled.length;
+  if (changed) state.markCliWrite(ctx.vault, ctx.sid);
+  const lines = [say('installed', r.installed), say('enabled', r.enabled), say('already there', r.present)].filter(Boolean);
+  if (changed) lines.push('Obsidian asks whether to trust the vault\'s plugins the first time it opens it: choose "Trust author and enable plugins".');
+  if (r.failed.length) throw new CliError(9, [...lines, `failed: ${r.failed.map((f) => `${f.id} (${f.reason})`).join(', ')}`].join('\n'));
+  return out(env, r, lines.join('\n') || 'nothing to do');
+}
+
 function cmdPostmortem(env, sub, args) {
   if (sub !== 'add') throw new CliError(2, 'usage: brain postmortem add <title…> [--project <p>]');
   const { name: ws, ctx } = workspaceCtx(env);
@@ -621,6 +641,8 @@ function cmdStatus(env) {
     s.repos = require('./lib/repos').quickCheck(env.cfg, name, ctx.vault);
     if (s.repos.withoutHub || s.repos.orphans) lines.push(`repos: ${s.repos.withoutHub} without hub · ${s.repos.orphans} hubs without their repo folder → brain bootstrap --dry-run`);
   }
+  s.missingPlugins = require('./lib/plugins').missing(ctx.vault);
+  if (s.missingPlugins.length) lines.push(`plugins: missing ${s.missingPlugins.join(', ')} → brain plugins`);
   return out(env, s, lines.join('\n'));
 }
 
@@ -648,10 +670,11 @@ const ERRORS = {
   'vault-overlap': (e) => new CliError(2, `vault overlaps workspace ${e.other}: each workspace needs its own folder`),
   'vault-locked': () => new CliError(7, 'vault busy: another session is writing it, retry in a moment'),
   'multiline-secret': () => new CliError(2, 'secret values must be one line: encode multi-line values (for example base64)'),
+  'bad-community-plugins': () => new CliError(2, 'cannot read .obsidian/community-plugins.json of the vault (not a JSON list): fix or remove it, nothing was changed'),
   'invalid-config': () => new CliError(2, `invalid config file: ${config.configPath()}`),
 };
 
-const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|checkpoint|context|show|search|project|postmortem|workspace|secret|index|commit|status|adopt> …';
+const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|checkpoint|context|show|search|project|postmortem|workspace|secret|plugins|index|commit|status|adopt> …';
 
 async function main(argv, io = {}) {
   const stdout = io.stdout || process.stdout;
@@ -665,7 +688,7 @@ async function main(argv, io = {}) {
   const cfgFile = str(flags.config) || locate(cwd, { globalFile }) || globalFile;
   try {
     const cfg = config.loadConfig(cfgFile);
-    const env = { cfg, cfgFile, flags, cwd, stdout, stderr };
+    const env = { cfg, cfgFile, flags, cwd, stdout, stderr, fetch: io.fetch || globalThis.fetch };
     const [cmd, sub, ...rest] = pos;
     const args = [sub, ...rest].filter((x) => x !== undefined);
     if (cfg.local && (cmd === 'workspace' || cmd === 'adopt')) throw new CliError(2, 'project mode: this folder has its own brain; workspaces live in the global config (run the command outside this folder)');
@@ -701,6 +724,9 @@ async function main(argv, io = {}) {
         break;
       case 'bootstrap':
         locked(env, () => cmdBootstrap(env));
+        break;
+      case 'plugins':
+        await cmdPlugins(env, args);
         break;
       case 'adopt':
         cmdAdopt(env, args);

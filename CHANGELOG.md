@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-10-30
 
 - **`brain plugins [<id>…] [--dry-run]`**: installs and enables Obsidian community plugins in the vault — Dataview and Kanban (the vault's Home and board render with them) and Homepage (opens `Home.md` at startup) by default, or the ids given. Each plugin comes from the community registry and the release its repo's `manifest.json` names, as Obsidian does (never a beta); its id is checked, plugins already installed are kept, `community-plugins.json` gains only the missing ids and `data.json` is never touched. Exits 9 when a plugin fails, after installing the others.
 - `brain status` names the plugins the vault needs that are not installed and enabled.
 - `brain commit` no longer stops on a plugin's code: the secret scan skips `main.js` and `styles.css` under `.obsidian/plugins/` (minified bundles are full of `token:`-like names); `manifest.json` and every note are still scanned.
+- README and plugin descriptions: the plugin is persistent project memory for coding agents, kept as an Obsidian vault — the agent's second brain for software work, not a personal one.
 
 ## 0.3.1 — 2026-10-26
 

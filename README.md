@@ -4,7 +4,11 @@
 
 # mdv-second-brain
 
-A Claude Code and Codex plugin that keeps an Obsidian-compatible **second brain** for each workspace while you work: a Kanban board whose cards link to living task and issue notes, a daily note with the state of every session, distilled project knowledge, ideas, decisions and post mortems — written by Claude, without you asking, and without mixing workspaces.
+**Persistent project memory for coding agents, kept as an Obsidian vault.** A Claude Code and Codex plugin: the agent writes it, you read and correct it in Obsidian.
+
+Claude and Codex forget everything when a session ends. This plugin gives them a second brain per workspace that remembers what was done, why, and what was learned: a Kanban board whose cards link to living task and issue notes, a daily note with the state of every session, distilled project knowledge, ideas, decisions and post mortems. It is written by the agent, without you asking, and workspaces never mix.
+
+It is the agent's second brain for software work, not a personal one: it captures what happens in your coding sessions, not what you read or think elsewhere. The task notes are the visible part. The core is distillation (what lasts moves into feature notes, project hubs, `DECISIONS.md`, `MEMORY.md`), bounded recall (only what the agent needs, never the whole vault) and continuity (the next session, or a parallel one, starts from where you are).
 
 - **Zero manual work.** Claude creates the task when work starts, keeps its status current, distils what lasts into the feature and project notes when a piece is done, and commits the vault.
 - **Never forgets.** Hooks track what changed in the session; if Claude edited your project but not the vault, it is reminded once before it stops. If a session dies, the next one starts from the last checkpoint.

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-10-30
 
 - Claude Code: when another plugin or settings hook named for Obsidian, a vault or a second brain also injects context at session start, the injected context names it and says that the vault's `AGENTS.md`, `WORKFLOW.md` and `TOOLS.md` govern every write. Disabled plugins and plugins installed for another project are left out; nothing is changed. Inspired by `vault_plugin_scan.py` of obsidian-second-brain.
 - **`brain recap [--week|--month] [--date YYYY-MM-DD]`**: what happened in a day (default), week or month — the tasks and issues closed in it (archived ones too) and, day by day, each session's state and log from the dailies, archived dailies included; log lines go first when the text is over budget. Inspired by `/obsidian-recap` of obsidian-second-brain.

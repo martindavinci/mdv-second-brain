@@ -1,6 +1,6 @@
 {
   "name": "mdv-second-brain",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Persistent project memory for coding agents, kept as an Obsidian vault per workspace: the agent records what was done, why and what was learned (Kanban board with living task and issue notes, daily session state, distilled project knowledge), with strict workspace isolation.",
   "author": {
     "name": "Martin DaVinci",

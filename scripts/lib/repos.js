@@ -218,8 +218,11 @@ function siblingRefs(r) {
 
 // Commits whose subject says a direction was taken ("switch to", "replace X with Y", "in favour of"…): decisions made
 // in code that never reached DECISIONS.md. Candidates only; one already written there (its hash cited) is skipped.
-const DECISION = /\b(switch(e[ds]|ing)?\b.*\b(to|from)\b|mov(e[ds]?|ing) away from|migrat(e[ds]?|ing|ion)\b.*\b(to|from)\b|replac(e[ds]?|ing)\b.*\bwith\b|drop(s|ped|ping)? (support|the \S+ (dependency|library|backend))|deprecat|remov(e[ds]?|ing) support|instead of|in favou?r of|decid(e[ds]?|ing)\b|BREAKING CHANGE|passa(t[oi])? a\b|migra\b.*\ba\b|sostitui|invece d[ie]|al posto d[ie]|abbandon)/i;
+// Not "instead of": in prose commits it mostly describes a change ("22 draw calls instead of 525"), not a choice.
+const DECISION = /\b(switch(e[ds]|ing)? (\S+ ){0,4}(to|from)\b|mov(e[ds]?|ing) away from|migrat(e[ds]?|ing|ion) (\S+ ){0,4}(to|from)\b|replac(e[ds]?|ing) (\S+ ){0,4}with\b|drop(s|ped|ping)? (support|the \S+ (dependency|library|backend))|deprecat|remov(e[ds]?|ing) support|in favou?r of|decid(e[ds]?|ing)\b|BREAKING CHANGE|passa(t[oi])? (da \S+ )?a\b|migra (\S+ ){0,4}(a|su|verso)\b|sostitui|abbandon)/i;
 const ROUTINE = /^(docs|test|tests|chore|style)(\([^)]*\))?!?:/i;
+// a longer subject sums up many changes: not one decision
+const MAX_SUBJECT = 120;
 const MAX_COMMITS = 200;
 const MAX_DECISIONS = 8;
 
@@ -238,7 +241,7 @@ function decisions(r, written) {
   const out = [];
   for (const line of log.split('\n')) {
     const [hash, date, subject] = line.split('\t');
-    if (!subject || ROUTINE.test(subject) || !DECISION.test(subject) || written.includes(hash)) continue;
+    if (!subject || subject.length > MAX_SUBJECT || ROUTINE.test(subject) || !DECISION.test(subject) || written.includes(hash)) continue;
     out.push({ project: r.project, hash, date, subject });
     if (out.length >= MAX_DECISIONS) break;
   }

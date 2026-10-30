@@ -221,10 +221,13 @@ test('bootstrap proposes decision-shaped commits as decisions, once, and never r
   commit('chore: v1.2.0');
   const it = commit('build: passa a pnpm al posto di npm');
   const ins = commit('fix: drop passwords that contain an @');
+  const prose = commit('perf: the walls drawn in 22 calls a frame instead of 525');
+  const loose = commit("feat: the hub's hidden flag is for every note: switched, it applies to the open notes and every new one from now on");
+  const long = commit('refactor: replace the old loader with the new one, and also the parser, the lexer, the cache, the logs, the docs and the build scripts');
   const plan = (await w.brain('--json', 'bootstrap', '--dry-run')).json();
   const mine = plan.decisions.filter((d) => d.project === 'app');
   assert.deepEqual(mine.map((d) => d.hash), [it, rep, sw]);
-  assert.ok(!mine.some((d) => d.hash === ins));
+  for (const h of [ins, prose, loose, long]) assert.ok(!mine.some((d) => d.hash === h), h);
   assert.match(mine[0].date, /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(mine[2].subject, 'refactor: switch the store to SQLite');
   assert.ok((await w.brain('bootstrap', '--dry-run')).text.includes(`decision? app ${sw} ${mine[2].date} — refactor: switch the store to SQLite`));

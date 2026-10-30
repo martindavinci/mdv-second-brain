@@ -43,10 +43,13 @@ function changedFiles(repo, pathspec) {
   return files;
 }
 
+// A plugin's released code (minified, full of `token:`-like names) is not the user's writing; its settings still are.
+const PLUGIN_BUNDLE = /(^|\/)\.obsidian\/plugins\/[^/]+\/(main\.js|styles\.css)$/;
+
 function scanChanged(repo, pathspec) {
   const hits = [];
   for (const file of changedFiles(repo, pathspec)) {
-    if (file.endsWith('.local.md')) continue;
+    if (file.endsWith('.local.md') || PLUGIN_BUNDLE.test(file)) continue;
     const full = path.join(repo, file);
     let text;
     try {

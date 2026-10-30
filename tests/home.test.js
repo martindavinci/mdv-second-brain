@@ -44,6 +44,15 @@ test('Home projects table has one row per project with board link and counts', (
   assert.match(rows[1], /^\| beta \| \[\[beta Plan\]\] \| 0 \| 1 \| 1 \| 1 \| \d{4}-\d{2}-\d{2} \|$/);
 });
 
+test('Home projects table follows a blank line, or Obsidian does not render it after the marker', () => {
+  const { ctx, vault: v } = makeVault();
+  tasks.addItem(ctx, 'task', { title: 'A1', project: 'alpha' });
+  home.rebuildHome(ctx);
+  assert.match(read(join(v, 'Home.md')), /<!-- brain:projects -->\n\n\| Project \|/);
+  home.rebuildHome(ctx);
+  assert.match(read(join(v, 'Home.md')), /<!-- brain:projects -->\n\n\| Project \|/, 'stable on rebuild');
+});
+
 test('rebuildHome fills the project-index of every hub', () => {
   const { ctx, vault: v } = makeVault();
   const hub = join(v, '20_Projects', 'alpha', 'alpha.md');

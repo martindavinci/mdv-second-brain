@@ -33,7 +33,8 @@ function projectsTable(ctx, items, ideaList, features) {
     return `| ${hubSet.has(p) ? `[[${p}]]` : p} | ${boardLink(ctx, p)} | ${count('in-progress')} | ${count('todo')} | ${bugs} | ${openIdeas} | ${dates[dates.length - 1] || T(ctx).none} |`;
   });
   const cols = T(ctx).cols;
-  return [`| ${cols.join(' | ')} |`, `|${cols.map(() => '---').join('|')}|`, ...rows].join('\n');
+  // the blank line first: Obsidian does not render a table that starts right under the marker comment
+  return ['', `| ${cols.join(' | ')} |`, `|${cols.map(() => '---').join('|')}|`, ...rows].join('\n');
 }
 
 function featureInfo(ctx) {

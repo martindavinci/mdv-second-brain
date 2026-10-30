@@ -1,6 +1,6 @@
 ---
 description: Second brain — activate it for a folder or chat (/brain init); in activated workspaces manage tasks, issues and ideas, search and commit the vault.
-argument-hint: "[init [--quick] | attach <ws> | detach | bootstrap | plugins [<id>…] | health [--fix] | task … | issue … | idea … | context | search <text> | project … | distill | postmortem <title> | index | commit -m <msg> | status]"
+argument-hint: "[init [--quick] | attach <ws> | detach | bootstrap | plugins [<id>…] | health [--fix] | recap [--week|--month] | task … | issue … | idea … | context | search <text> | project … | distill | postmortem <title> | index | commit -m <msg> | status]"
 ---
 
 Use the second-brain skill for this request. Arguments: $ARGUMENTS

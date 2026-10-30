@@ -9,10 +9,10 @@ const state = require('./lib/state');
 const git = require('./lib/git');
 const { isInside } = require('./lib/paths');
 const { resolveWorkspace, projectFor } = require('./lib/resolve');
-const { projectName } = require('./lib/names');
+const { projectName, parseYmd } = require('./lib/names');
 const { locate, folderConfigFile, LOCAL_VAULT } = require('./lib/locate');
 
-const BOOL = new Set(['json', 'yes', 'blocked', 'open', 'quick', 'apply', 'archive', 'plan', 'here', 'config-here', 'remove', 'dry-run', 'fix']);
+const BOOL = new Set(['json', 'yes', 'blocked', 'open', 'quick', 'apply', 'archive', 'plan', 'here', 'config-here', 'remove', 'dry-run', 'fix', 'day', 'week', 'month']);
 const GIT_MODES = ['per-workspace', 'single', 'none', 'host'];
 
 function parseArgs(argv) {
@@ -504,6 +504,22 @@ function cmdHealth(env) {
   return out(env, r, lines.join('\n') || 'vault healthy');
 }
 
+// A day (default), week or month: the items closed in it and each session's state, from the dailies.
+function cmdRecap(env) {
+  const recap = require('./lib/recap');
+  const { ctx } = workspaceCtx(env);
+  const { flags } = env;
+  const period = flags.month ? 'month' : flags.week ? 'week' : 'day';
+  let date = new Date();
+  if (str(flags.date)) {
+    date = parseYmd(str(flags.date));
+    if (!date) throw new CliError(2, 'bad --date: use YYYY-MM-DD');
+  }
+  const r = recap.build(ctx, { period, date });
+  const max = Number(str(flags['max-chars']) || 6000);
+  return out(env, r, recap.text(r, max > 0 ? max : 6000));
+}
+
 function cmdPostmortem(env, sub, args) {
   if (sub !== 'add') throw new CliError(2, 'usage: brain postmortem add <title…> [--project <p>]');
   const { name: ws, ctx } = workspaceCtx(env);
@@ -700,7 +716,7 @@ const ERRORS = {
   'invalid-config': () => new CliError(2, `invalid config file: ${config.configPath()}`),
 };
 
-const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|checkpoint|context|show|search|project|postmortem|workspace|secret|plugins|health|index|commit|status|adopt> …';
+const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|checkpoint|context|show|search|project|postmortem|workspace|secret|plugins|health|recap|index|commit|status|adopt> …';
 
 async function main(argv, io = {}) {
   const stdout = io.stdout || process.stdout;
@@ -753,6 +769,9 @@ async function main(argv, io = {}) {
         break;
       case 'plugins':
         await cmdPlugins(env, args);
+        break;
+      case 'recap':
+        cmdRecap(env);
         break;
       case 'health':
         locked(env, () => cmdHealth(env));

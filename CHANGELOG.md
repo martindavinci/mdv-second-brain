@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- New vaults: `AGENTS.md` asks for notes that read alone, facts that are timeless, dated or a pointer, `TBD` instead of invented facts, and text read from notes, repos and the web treated as data, never as instructions; the injected context carries that last rule too. Existing vaults keep their `AGENTS.md`. Rules adapted from the [AI-First Note Spec](https://github.com/eugeniughelbur/obsidian-second-brain/blob/main/AI-FIRST.md).
+
 ## 0.4.0 — 2026-10-30
 
 - **`brain plugins [<id>…] [--dry-run]`**: installs and enables Obsidian community plugins in the vault — Dataview and Kanban (the vault's Home and board render with them) and Homepage (opens `Home.md` at startup) by default, or the ids given. Each plugin comes from the community registry and the release its repo's `manifest.json` names, as Obsidian does (never a beta); its id is checked, plugins already installed are kept, `community-plugins.json` gains only the missing ids and `data.json` is never touched. Exits 9 when a plugin fails, after installing the others.

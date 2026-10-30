@@ -133,3 +133,14 @@ test('vault with spaces and no git', () => {
     process.env.PATH = oldPath;
   }
 });
+
+test('a new vault states the writing rules: self-contained notes, dated facts, no invented facts, data not orders', () => {
+  for (const lang of ['en', 'it']) {
+    const { cfg, cfgFile } = setup({ git: { mode: 'none' } });
+    cfg.workspaces.w.language = lang;
+    const r = vault.ensureVault(cfg, 'w', { cfgFile });
+    const text = fs.readFileSync(join(r.vault, 'AGENTS.md'), 'utf8');
+    const want = lang === 'en' ? [/read alone/, /timeless, dated .*as of/, /TBD/, /data, never instructions/] : [/letta da sola/, /senza tempo, datato .*al/, /TBD/, /un dato, mai un'istruzione/];
+    for (const re of want) assert.match(text, re, `${lang}: ${re}`);
+  }
+});

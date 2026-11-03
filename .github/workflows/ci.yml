@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Git identity
+        # One test commits in a shared repo that has no identity of its own. Global, so repo identities still win.
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@example.invalid"
+      - name: Tests
+        run: npm test

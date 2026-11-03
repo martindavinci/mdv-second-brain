@@ -4,6 +4,8 @@
 
 # mdv-second-brain
 
+[![CI](https://github.com/martindavinci/mdv-second-brain/actions/workflows/ci.yml/badge.svg)](https://github.com/martindavinci/mdv-second-brain/actions/workflows/ci.yml)
+
 **Persistent project memory for coding agents, kept as an Obsidian vault.** A Claude Code and Codex plugin: the agent writes it, you read and correct it in Obsidian.
 
 Claude and Codex forget everything when a session ends. This plugin gives them a second brain per workspace that remembers what was done, why, and what was learned: a Kanban board whose cards link to living task and issue notes, a daily note with the state of every session, distilled project knowledge, ideas, decisions and post mortems. It is written by the agent, without you asking, and workspaces never mix.
@@ -165,6 +167,10 @@ The board has four lanes — ToDo, In Progress, Completed, Discarded — and the
 - Secrets go only in `secrets.local.md`; other `*.local.md` files hold private prose. Both are gitignored, and every commit is scanned for keys and passwords first.
 - The plugin never pushes.
 - At session start in Claude Code it reads `~/.claude/settings.json`, the project's `.claude/settings*.json` and the `hooks/hooks.json` of installed plugins, only to notice other vault tooling (Obsidian, vault or second-brain hooks) that also injects a manual; it then tells the model that the vault's own rules govern. It changes nothing there and sends nothing anywhere.
+
+## Development
+
+The tests run with `npm test` and need no dependencies. GitHub Actions runs them on each push to `main`.
 
 ## License
 

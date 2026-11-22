@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The attention feed: every item except a question carries its own "Snooze until tomorrow" command to copy, so an app reading the feed can offer it without knowing the tool behind it.
+
 ## 0.9.0 — 2026-11-22
 
 - **`brain workspace attention <ws> [--feed-dir <folder>] [--remote-ttl <hours>] [--no-feed]`**: where the attention feed of a workspace is written (a folder you made; the plugin never creates it) and how often its GitHub part runs; with no option, what is set now.

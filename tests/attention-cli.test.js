@@ -179,3 +179,18 @@ test('workspace_attention_sets_and_clears_the_feed_folder', async () => {
   assert.deepEqual(a.outputs, []);
   assert.equal(a.remoteTtlHours, 3, 'the other setting is kept');
 });
+
+test('every_item_but_questions_offers_its_snooze_command_once', { skip: !hasGit }, async () => {
+  const m = makeVault();
+  ahead(m);
+  const cli = cliFor(m);
+  assert.equal((await cli(['checkpoint', '--session', 's-snz', '--ask', 'Which name?'])).code, 0);
+  await cli(['attention', '--refresh', '--quiet']);
+  const items = (await cli(['--json', 'attention', '--refresh'])).json().items;
+  const [it] = items.filter((i) => i.kind === 'unpushed');
+  const snz = it.actions.filter((a) => a.type === 'copy' && / attention snooze /.test(a.value));
+  assert.equal(snz.length, 1, 'once, even after two refreshes');
+  assert.match(snz[0].value, new RegExp(`attention snooze ${it.id}$`));
+  const [q] = items.filter((i) => i.kind === 'question');
+  assert.ok(q && !q.actions.some((a) => / attention snooze /.test(a.value || '')));
+});

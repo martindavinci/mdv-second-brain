@@ -105,7 +105,7 @@ Kinds in version 1:
 | `open-url` | `label`, `url` | opens the `https://` URL in the browser |
 | `open-note` | `label`, `path` | opens the Markdown note at `path` (absolute), for example in Obsidian or an editor |
 
-Commands in `copy` actions are built by the brain from facts it read (folder paths, branch, tag and plugin names), never taken from a note's text; a part that some shell would expand inside double quotes makes the brain leave the action out. Skip action types you do not know.
+Commands in `copy` actions are built by the brain from facts it read (folder paths, branch, tag and plugin names), never taken from a note's text; a part that some shell would expand inside double quotes makes the brain leave the action out. Skip action types you do not know. Every item except a question also carries a last `copy` action that puts the item off until tomorrow (the producer's own command): a reader that shows actions generically offers it with no special handling.
 
 ## Ids and episodes
 

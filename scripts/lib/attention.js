@@ -549,6 +549,17 @@ function writeOutputs(env, ws, cache, now = new Date()) {
 // The whole queue again: local facts every time, the network part when its TTL ran out (or `remote`), then under the
 // vault lock the latest snoozes, done marks and questions are merged and the cache and feeds written.
 // env: { cfg, cfgFile, home, run, now, cli }.
+// Every item but questions (they leave with `done`) offers its own snooze command, so a reader can put it off without
+// knowing which tool wrote the feed. Items kept from the last network run carry the old one: it is replaced, not added.
+const SNOOZE = / attention snooze /;
+function withSnooze(items, brain) {
+  return items.map((i) => {
+    if (i.kind === 'question') return i;
+    const actions = (i.actions || []).filter((a) => !(a.type === 'copy' && SNOOZE.test(a.value || '')));
+    return { ...i, actions: [...actions, brain('Snooze until tomorrow', ['attention', 'snooze', i.id])].filter(Boolean) };
+  });
+}
+
 function refresh(env, ctx, ws, { remote = false } = {}) {
   const { attentionFor } = require('./config');
   const now = env.now || new Date();
@@ -560,7 +571,7 @@ function refresh(env, ctx, ws, { remote = false } = {}) {
   const net = remoteStep(prev, repos, { run: env.run || defaultRun, now, ttlHours: att.remoteTtlHours, force: remote });
   return lock.withLock(ctx.vault, () => {
     const latest = readCache(ctx.vault) || prev;
-    const items = computeEpisodes(latest, [...local, ...net.items, ...questionItems(ctx.vault, brain)], now);
+    const items = withSnooze(computeEpisodes(latest, [...local, ...net.items, ...questionItems(ctx.vault, brain)], now), brain);
     const cache = buildCache(latest, items, now, net.remote, { outputErrors: (latest && latest.outputErrors) || {} });
     cache.outputErrors = writeOutputs(env, ws, cache, now);
     writeCache(ctx.vault, cache);

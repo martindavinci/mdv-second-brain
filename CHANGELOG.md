@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 — 2026-11-22
 
 - **`brain workspace attention <ws> [--feed-dir <folder>] [--remote-ttl <hours>] [--no-feed]`**: where the attention feed of a workspace is written (a folder you made; the plugin never creates it) and how often its GitHub part runs; with no option, what is set now.
 - **`brain attention`**: what waits for you in the workspace — commits not pushed (and `main`/`master` without an upstream), tags missing on the remote, a working tree uncommitted for more than three days, GitHub draft releases and a failed last CI run of the default branch (through `gh`), failing playbook checks, outgrown hubs, playbook suggestions, items in progress untouched for over 14 days, a Claude Code plugin installed behind the version its repo released, questions queued by agent sessions, and the vault's own commits not pushed for more than three days. Every command in it is built from facts, to copy; nothing is run. Ignored repos are left out; project mode has no queue.

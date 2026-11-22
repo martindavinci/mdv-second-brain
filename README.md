@@ -136,6 +136,18 @@ secrets.local.md  *.local.md  .brain/          never committed
 
 The board has four lanes — ToDo, In Progress, Completed, Discarded — and the board wins: drag a card in Obsidian and the note's status follows. Notes are never deleted; deleting moves them to `90_Archive/`. `AGENTS.md`, `WORKFLOW.md` and `TOOLS.md` are generated once and then belong to you: Claude reads them and follows them.
 
+## Playbooks
+
+A playbook is a recipe for a family of projects ("a new Android app of the suite", "a Windows desktop app", "a Claude Code plugin"): a note in `10_Notes/` with `type: playbook`. Besides its prose it holds checks, one line each, that only read the project's files:
+
+```
+- `backup-rules` — `apps-*/app/src/main/AndroidManifest.xml` has `android:dataExtractionRules=`
+- `no-internet` — `apps-*/app/src/main/AndroidManifest.xml` lacks `android.permission.INTERNET`
+- `licence` — `LICENSE` exists
+```
+
+Each wildcard folder is checked on its own, so a monorepo gets one result per app. A project follows a playbook only when its hub says so (`brain project playbook`); then the session context names the playbook and its failing checks, `brain check` lists them and the agent runs it before a tag. A repo that looks like a family (`applies_when`) but does not follow its playbook gets a suggestion, never a link. Nothing is run and nothing in the project is written.
+
 ## Commands
 
 `/brain <command>` in Claude Code, `$second-brain <command>` in Codex, or plain language. The CLI is `node scripts/brain.js`.
@@ -152,10 +164,12 @@ The board has four lanes — ToDo, In Progress, Completed, Discarded — and the
 | `brain project list` · `split <p>` · `merge <p>` | give a project its own board and indexes, or fold it back |
 | `brain bootstrap [--dry-run]` | a hub for every git repo under the workspace's folders, `## Repo` refreshed on each run; renames, relation candidates, broken sibling references and decision-shaped commits ("switch to", "replace X with Y", "in favour of"…) reported; a decision is written to `DECISIONS.md` only once you confirm it |
 | `brain plugins [<id>…] [--dry-run]` | install and enable Obsidian community plugins in the vault: Dataview, Kanban and Homepage (opens `Home.md`) by default, or the ids given; each from the release its repo's `manifest.json` names, as Obsidian does. Installed plugins and your `community-plugins.json` entries and `data.json` settings are kept |
-| `brain health [--fix] [--days <n>]` | check the vault: broken `[[links]]` (with the note they most likely mean), orphan notes, items in progress untouched for over 14 days, task, issue, feature and hub notes without frontmatter, duplicate note names, empty folders, hubs the repo has outgrown (a new tag or over 20 commits since the hub's own text last changed); `--fix` repoints only links with exactly one certain match (same name but for case, accents, separators or characters a note name cannot hold, keeping the text they showed) and removes empty folders |
+| `brain health [--fix] [--days <n>]` | check the vault: broken `[[links]]` (with the note they most likely mean), orphan notes, items in progress untouched for over 14 days, task, issue, feature and hub notes without frontmatter, duplicate note names, empty folders, hubs the repo has outgrown (a new tag or over 20 commits since the hub's own text last changed), failing playbook checks, repos that match a playbook they do not follow, broken check lines; `--fix` repoints only links with exactly one certain match (same name but for case, accents, separators or characters a note name cannot hold, keeping the text they showed) and removes empty folders |
 | `brain recap [--week\|--month] [--date YYYY-MM-DD] [--max-chars]` | what happened in a day (default), week (Monday to Sunday) or month: tasks and issues closed in it, archived ones too, and each session's state and log from the dailies |
 | `brain project rename <old> <new> [--dry-run]` | move the hub, folder, topic notes, split board and archive; rewrite links, `project:` fields and idea headings |
 | `brain project relate <a> --depends-on\|--used-by\|--source-of\|--built-from\|--related <b> [--remove]` | a relation written in both hubs (`used_by` is the other side of `depends_on`, `built_from` of `source_of`) |
+| `brain project playbook <p> "<playbook>" [--remove]` · `brain project waive <p> <id\|id@folder\|"[[Playbook]]"> [--remove]` | the hub follows a playbook; an intentional difference is waived (a check, a check in one folder, or the whole playbook) |
+| `brain check [<project>]` | the checks of the playbooks a project follows: each failing check with the folders it fails in; playbooks whose `applies_when` matches a repo that does not follow them are suggested |
 | `brain secret set` · `get` · `list` | values in `secrets.local.md`, referenced as `{{secret:KEY}}` |
 | `brain workspace add` · `list` · `map` · `ignore` | edit the config |
 | `brain checkpoint --status … --next … --open … --log …` | update this session's section of the daily (safe with parallel sessions) |

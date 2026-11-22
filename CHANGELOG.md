@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Playbooks that remind**: a playbook note (`type: playbook` in `10_Notes/`) holds check lines — `` - `id` — `glob` has|lacks|exists `text or /regex/` `` — that only read the project's files; each wildcard folder is checked on its own, so a monorepo gets one result per app. A hub follows a playbook with `brain project playbook`, and waives an intentional difference with `brain project waive` (a check, a check in one folder, or the whole playbook). The session context and `brain context` name the playbooks of the current project and its failing checks in one line; `brain check` lists them; `brain health` adds failing checks, broken check lines and repos that match a playbook's `applies_when` without following it; `brain bootstrap` reports the same suggestions for the hubs it creates. A suggestion is never applied on its own. The skill runs `brain check` before a tag or release and turns a fix that holds for a whole family into a check line.
+- New vaults: WORKFLOW rows for runbooks and playbooks, and the check-line format in TOOLS.md. Existing vaults keep their files.
+- Fix: the folder configuration search compares folders by real path, so from an 8.3 short name, a junction or a symlink of the home folder the global configuration is no longer taken for a folder's own (a test run through such a path wrote its workspaces into the real configuration).
+
 ## 0.7.1 — 2026-11-22
 
 - Fix: the identity proposed at init no longer takes the global `~/.gitconfig` for a folder's own when the folder is reached through another form of the home path (a Windows 8.3 short name such as `RUNNER~1`, a junction or a symlink): the search for a `.gitconfig` now stops at the home folder compared as real paths.

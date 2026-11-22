@@ -421,6 +421,16 @@ function cmdProject(env, sub, args) {
       const side = `${r.a} ${rel} ${r.b}, ${r.b} ${projects.RELATIONS[rel]} ${r.a}`;
       return out(env, r, r.changed ? `${r.removed ? 'removed' : 'related'}: ${side}` : `unchanged: ${side}`);
     }
+    case 'playbook':
+    case 'waive': {
+      const pb = require('./lib/playbooks');
+      if (args.length < 2) throw new CliError(2, sub === 'playbook' ? 'usage: brain project playbook <project> "<playbook>" [--remove]' : 'usage: brain project waive <project> <id|id@unit|"[[Playbook]]"> [--remove]');
+      const opts = { remove: !!env.flags.remove };
+      const r = sub === 'playbook' ? pb.link(ctx.vault, args[0], args.slice(1).join(' '), opts) : pb.setWaive(ctx.vault, args[0], args.slice(1).join(' '), opts);
+      if (r.changed) state.markCliWrite(ctx.vault, ctx.sid);
+      const what = sub === 'playbook' ? `[[${r.playbook}]]` : r.entry;
+      return out(env, r, `${r.changed ? (opts.remove ? 'removed' : sub === 'playbook' ? 'linked' : 'waived') : 'unchanged'}: ${r.project} → ${what}`);
+    }
     case 'rename': {
       const rename = require('./lib/rename');
       const p = rename.planRename(ctx, requireArg(args[0], 'project'), requireArg(args[1], 'new name'));
@@ -454,7 +464,9 @@ function cmdBootstrap(env) {
     runIndex(env, ctx);
     state.markCliWrite(ctx.vault, ctx.sid);
   }
-  const value = { dryRun, ...done, repos: p.repos.map(({ dir, base, ...r }) => r), renames: p.renames, orphans: p.orphans, candidates: p.candidates, broken: p.broken, decisions: p.decisions };
+  const created = new Set(done.created || []);
+  const playbookSuggestions = dryRun ? [] : playbookReport(env, ctx).filter((x) => created.has(x.project) && x.suggestions.length).map((x) => ({ project: x.project, playbooks: x.suggestions }));
+  const value = { dryRun, ...done, repos: p.repos.map(({ dir, base, ...r }) => r), renames: p.renames, orphans: p.orphans, candidates: p.candidates, broken: p.broken, decisions: p.decisions, playbookSuggestions };
   return out(env, value, repos.describe(p, { dryRun }));
 }
 
@@ -487,12 +499,68 @@ function staleHubs(env, ctx, project) {
   return all.map((r) => stale.check(ctx.vault, r)).filter(Boolean);
 }
 
+// Playbook results for the projects with a hub and a repo folder (or only `project`), and suggestions for the rest.
+function playbookReport(env, ctx, project) {
+  if (env.cfg.local || !ctx.ws) return [];
+  const pb = require('./lib/playbooks');
+  const pbs = pb.loadPlaybooks(ctx.vault);
+  if (!pbs.size) return [];
+  const all = require('./lib/repos').discover(env.cfg, ctx.ws, ctx.vault).filter((r) => !r.reason && (!project || r.project === project));
+  return all
+    .map((r) => {
+      const hub = pb.hubData(ctx.vault, r.project);
+      if (!hub) return null;
+      return { project: r.project, results: pb.run(ctx.vault, hub, r.dir, pbs), suggestions: pb.suggest(ctx.vault, hub, r.dir, pbs) };
+    })
+    .filter((x) => x && (x.results.length || x.suggestions.length));
+}
+
+// Playbook checks of one project (an argument, --project, or the folder we are in) or of every project.
+function cmdCheck(env, args) {
+  if (env.cfg.local) throw new CliError(2, 'project mode: playbook checks need a workspace (the vault outside the project)');
+  const { name: ws, ctx } = workspaceCtx(env);
+  const want = args.join(' ') || cwdProject(env, ws);
+  const pb = require('./lib/playbooks');
+  let projects = playbookReport(env, ctx, want ? projectName(want) : undefined);
+  if (want && !projects.length) {
+    // a project folder that is not a repo directly under the workspace folders: check it when we are in it
+    const raw = projectFor(env.cfg, ws, env.cwd);
+    const r = resolveWorkspace(env.cfg, env.cwd);
+    const hub = pb.hubData(ctx.vault, projectName(want));
+    if (hub && raw && projectName(raw) === projectName(want) && r.mappedDir) {
+      const dir = require('node:path').join(r.mappedDir, raw);
+      projects = [{ project: projectName(want), results: pb.run(ctx.vault, hub, dir), suggestions: pb.suggest(ctx.vault, hub, dir) }].filter((x) => x.results.length || x.suggestions.length);
+    }
+  }
+  const lines = [];
+  for (const p of projects) {
+    lines.push(`${p.project}:`);
+    for (const r of p.results) {
+      if (r.missing) {
+        lines.push(`- [[${r.playbook}]]: not found in ${pb.NOTES}/`);
+        continue;
+      }
+      lines.push(`- [[${r.playbook}]]: ${r.total - r.failed.length - r.waived.length} ok, ${r.failed.length} failing, ${r.waived.length} waived`);
+      for (const x of r.failed) lines.push(`  ✗ ${x.id} — ${x.units.map((u) => (u === '.' ? 'repo' : u)).join(', ')}`);
+      for (const w of r.waived) lines.push(`  · ${w} — waived`);
+      for (const b of r.broken) lines.push(`  ! broken line${b.id ? ` ${b.id}` : ''}: ${b.reason}`);
+    }
+    if (p.suggestions.length) lines.push(`- suggested: ${p.suggestions.map((n) => `[[${n}]]`).join(', ')} (ask the user, then brain project playbook ${p.project} "<playbook>")`);
+  }
+  const value = { projects, failed: projects.reduce((n, p) => n + p.results.reduce((m, r) => m + r.failed.length + (r.missing ? 1 : 0), 0), 0) };
+  return out(env, value, lines.join('\n') || (want ? `no playbooks linked or suggested for ${projectName(want)}` : 'no project links a playbook'));
+}
+
 function cmdHealth(env) {
   const { ctx } = workspaceCtx(env);
   const fix = !!env.flags.fix;
   const days = Number(str(env.flags.days) || 14);
   const r = require('./lib/health').check(ctx, { fix, days: days > 0 ? days : 14 });
   r.staleHubs = staleHubs(env, ctx);
+  const report = playbookReport(env, ctx);
+  r.playbooks = report.flatMap((p) => p.results.filter((x) => x.missing || x.failed.length).map((x) => ({ project: p.project, playbook: x.playbook, missing: !!x.missing, failed: x.failed.map((y) => y.id) })));
+  r.playbookSuggestions = report.filter((p) => p.suggestions.length).map((p) => ({ project: p.project, playbooks: p.suggestions }));
+  r.brokenChecks = report.flatMap((p) => p.results.flatMap((x) => x.broken.map((b) => ({ project: p.project, playbook: x.playbook, ...b }))));
   if (fix && (r.fixed.length || r.removedFolders.length)) state.markCliWrite(ctx.vault, ctx.sid);
   const lines = [];
   const block = (label, items, show = (x) => x) => {
@@ -504,6 +572,9 @@ function cmdHealth(env) {
   block('fixed links', r.fixed, (f) => `${f.file}: [[${f.target}]] → [[${f.to}]]`);
   block(`in progress, untouched for over ${days} days`, r.stale, (s) => `${s.name}${s.project ? ` (${s.project})` : ''} — ${s.days} days`);
   block('hubs the repo has outgrown (a new tag or over 20 commits since their text changed)', r.staleHubs, (s) => `${s.hub} — ${s.tags.length ? `tags ${s.tags.join(', ')}; ` : ''}${s.commits} commits`);
+  block('playbook checks failing (brain check <project>)', r.playbooks, (p) => `${p.project} — [[${p.playbook}]]: ${p.missing ? 'not found' : p.failed.join(', ')}`);
+  block('repos matching a playbook they do not link (ask the user)', r.playbookSuggestions, (p) => `${p.project} — ${p.playbooks.map((n) => `[[${n}]]`).join(', ')}`);
+  block('broken playbook check lines', r.brokenChecks, (b) => `[[${b.playbook}]] ${b.id || ''}: ${b.reason}`);
   block('without frontmatter', r.noFrontmatter);
   block('duplicate names', r.duplicates, (d) => `${d.name}: ${d.files.join(', ')}`);
   block('empty folders', r.emptyFolders);
@@ -638,6 +709,10 @@ function cmdContext(env) {
   const { name: ws, ctx } = workspaceCtx(env);
   const project = cwdProject(env, ws);
   const notes = project ? staleHubs(env, ctx, projectName(project)).map(require('./lib/stale').message) : [];
+  if (project) {
+    const pb = require('./lib/playbooks');
+    for (const p of playbookReport(env, ctx, projectName(project))) notes.push(...[pb.contextLine(p.results), pb.suggestionLine(p.suggestions, p.project)].filter(Boolean));
+  }
   const text = require('./lib/retrieve').context(ctx, project, { notes });
   return out(env, { text }, text);
 }
@@ -720,6 +795,8 @@ const ERRORS = {
   'reserved-name': () => new CliError(2, 'reserved or empty project name'),
   'unknown-project': (e) => new CliError(2, `unknown project: ${e.project}`),
   'no-hub': (e) => new CliError(2, `no hub for project ${e.project}: brain project add ${e.project}`),
+  'no-playbook': (e) => new CliError(2, `no playbook named ${e.name} in 10_Notes/ (a note with type: playbook)`),
+  'bad-waive': (e) => new CliError(2, `cannot waive ${e.entry}: use a check id, id@unit or "[[Playbook]]"`),
   'bad-relation': () => new CliError(2, 'a relation links two different projects: --depends-on | --used-by | --source-of | --built-from | --related'),
   'already-split': () => new CliError(2, 'project already split'),
   'not-split': () => new CliError(2, 'project is not split'),
@@ -730,7 +807,7 @@ const ERRORS = {
   'invalid-config': () => new CliError(2, `invalid config file: ${config.configPath()}`),
 };
 
-const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|checkpoint|context|show|search|project|postmortem|workspace|secret|plugins|health|recap|index|commit|status|adopt> …';
+const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|checkpoint|context|show|search|project|postmortem|workspace|secret|plugins|health|check|recap|index|commit|status|adopt> …';
 
 async function main(argv, io = {}) {
   const stdout = io.stdout || process.stdout;
@@ -789,6 +866,9 @@ async function main(argv, io = {}) {
         break;
       case 'health':
         locked(env, () => cmdHealth(env));
+        break;
+      case 'check':
+        cmdCheck(env, args);
         break;
       case 'adopt':
         cmdAdopt(env, args);

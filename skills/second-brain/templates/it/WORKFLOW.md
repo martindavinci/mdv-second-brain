@@ -13,7 +13,9 @@ Domande, letture, esplorazione e ritocchi banali non creano nulla.
 | Idea non decisa | riga in `00_Inbox/Ideas.md`, mai una card |
 | Scoperta su una feature, un task o un'issue | una sezione di quella nota |
 | Conoscenza del progetto (architettura, build/run/release, convenzioni, gotcha, how-to) | hub del progetto; se lunga → `<progetto> — <Argomento>.md` nella cartella del progetto |
+| Runbook di un progetto (deploy, release, restore, rotazione chiavi: passi da eseguire) | `<progetto> — Runbook <argomento>.md` nella cartella del progetto, linkato dall'hub in build/run/release |
 | Scoperta trasversale | una riga in `MEMORY.md`, o una nota sciolta in `10_Notes/` |
+| Playbook: ricetta per una famiglia di progetti | nota in `10_Notes/` con `type: playbook`, righe di controllo (vedi TOOLS.md), collegata ai progetti con `brain project playbook` |
 | Post mortem | lezioni nella feature + `<progetto> — Post Mortem <data>.md` |
 | Spec o plan scritti in chat | sintesi nella feature (riepilogo, regole, decisioni aperte, fonti) + TODO nel task; mai copia integrale |
 | Decisione stabile | una riga in `DECISIONS.md` + dettagli nella nota linkata |

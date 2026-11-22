@@ -13,7 +13,9 @@ Questions, reads, exploration and trivial touch-ups create nothing.
 | Idea, not decided | line in `00_Inbox/Ideas.md`, never a card |
 | Finding about a feature, task or issue | a section of that note |
 | Project knowledge (architecture, build/run/release, conventions, gotchas, how-to) | project hub; when long → `<project> — <Topic>.md` in the project folder |
+| A project's runbook (deploy, release, restore, key rotation: steps to run) | `<project> — Runbook <topic>.md` in the project folder, linked from the hub's build/run/release section |
 | Cross-project finding | one line in `MEMORY.md`, or a loose note in `10_Notes/` |
+| Playbook: a recipe for a family of projects | a note in `10_Notes/` with `type: playbook`, check lines (see TOOLS.md), linked to its projects with `brain project playbook` |
 | Post mortem | lessons in the feature + `<project> — Post Mortem <date>.md` |
 | Spec or plan written in chat | summary in the feature (summary, rules, open decisions, sources) + TODOs in the task; never a full copy |
 | Stable decision | one line in `DECISIONS.md` + details in the linked note |

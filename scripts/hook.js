@@ -60,6 +60,16 @@ function sessionContext(env, ws, sid, cwd) {
     const s = stale.check(v, { project: o.project, dir: path.join(r.mappedDir, raw) });
     if (s) o.staleHub = stale.message(s);
   }
+  // playbooks: the ones the hub links (with failing checks) and the ones whose applies_when matches this repo
+  if (lang && !cfg.local && o.project && r.mappedDir) {
+    const pb = require('./lib/playbooks');
+    const pbs = pb.loadPlaybooks(v);
+    if (pbs.size) {
+      const hub = o.projectNoteExists ? pb.hubData(v, o.project) || {} : {};
+      const dir = path.join(r.mappedDir, raw);
+      o.playbookLines = [pb.contextLine(pb.run(v, hub, dir, pbs)), pb.suggestionLine(pb.suggest(v, hub, dir, pbs), o.project, { hub: o.projectNoteExists })].filter(Boolean);
+    }
+  }
   // Codex runs none of Claude Code's plugins or settings hooks
   if (env.host !== 'codex') o.others = require('./lib/neighbours').find({ home: env.home, cwd });
   return buildSessionContext(o);

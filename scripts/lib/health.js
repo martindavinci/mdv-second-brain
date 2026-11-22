@@ -112,6 +112,17 @@ function itemDate(file, data) {
   }
 }
 
+// Items in progress untouched (updated, else created, else the file's time) for more than `days`.
+function stalled(ctx, { now = new Date(), days = 14 } = {}) {
+  const out = [];
+  for (const i of tasks.listItems(ctx, { status: 'in-progress' })) {
+    const d = itemDate(i.file, tasks.readNote(i.file).data);
+    const age = d ? Math.floor((now - d) / DAY) : 0;
+    if (age > days) out.push({ name: i.name, kind: i.kind, project: i.project, days: age, file: i.file });
+  }
+  return out;
+}
+
 function check(ctx, { now = new Date(), days = 14, fix = false } = {}) {
   const vault = ctx.vault;
   const inv = inventory(vault);
@@ -157,12 +168,7 @@ function check(ctx, { now = new Date(), days = 14, fix = false } = {}) {
 
   const orphans = inv.live.map((f) => relOf(vault, f)).filter((r) => isOrphanCandidate(r) && !incoming.has(lower(path.basename(r, '.md')))).sort();
 
-  const stale = [];
-  for (const i of tasks.listItems(ctx, { status: 'in-progress' })) {
-    const d = itemDate(i.file, tasks.readNote(i.file).data);
-    const age = d ? Math.floor((now - d) / DAY) : 0;
-    if (age > days) stale.push({ name: i.name, kind: i.kind, project: i.project, days: age });
-  }
+  const stale = stalled(ctx, { now, days }).map(({ file, ...s }) => s);
 
   const typed = [...tasks.itemFiles(vault, ['task', 'issue', 'feature'])];
   try {
@@ -202,4 +208,4 @@ function check(ctx, { now = new Date(), days = 14, fix = false } = {}) {
   return { broken, fixed, orphans, stale, noFrontmatter, duplicates, emptyFolders: fix ? [] : emptyFolders, removedFolders };
 }
 
-module.exports = { check, linksOf, fold };
+module.exports = { check, stalled, linksOf, fold };

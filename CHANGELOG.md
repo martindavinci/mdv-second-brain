@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 — 2026-11-22
 
 - **Playbooks that remind**: a playbook note (`type: playbook` in `10_Notes/`) holds check lines — `` - `id` — `glob` has|lacks|exists `text or /regex/` `` — that only read the project's files; each wildcard folder is checked on its own, so a monorepo gets one result per app. A hub follows a playbook with `brain project playbook`, and waives an intentional difference with `brain project waive` (a check, a check in one folder, or the whole playbook). The session context and `brain context` name the playbooks of the current project and its failing checks in one line; `brain check` lists them; `brain health` adds failing checks, broken check lines and repos that match a playbook's `applies_when` without following it; `brain bootstrap` reports the same suggestions for the hubs it creates. A suggestion is never applied on its own. The skill runs `brain check` before a tag or release and turns a fix that holds for a whole family into a check line.
 - New vaults: WORKFLOW rows for runbooks and playbooks, and the check-line format in TOOLS.md. Existing vaults keep their files.

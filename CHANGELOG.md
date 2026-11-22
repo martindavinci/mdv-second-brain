@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Stale hubs**: a hub is flagged when its repo got a new tag or more than 20 commits since the hub's own text last changed (generated sections and frontmatter do not count). The session-start context and `brain context` name it for the current project only, with what changed and what to do; `brain health` lists every project's. `brain index` and `brain commit` keep a hash of each hub's text and the repo's HEAD when it last changed in `.brain/hubs.json`; a hub never tracked starts from the repo as it was on its `updated` day. Repos are only read; the agent decides what to rewrite.
+
 ## 0.6.0 — 2026-11-22
 
 - Fix: a vault inside a parent repo reached through a different form of its path (a Windows 8.3 short name such as `RUNNER~1`, a junction or symlink, macOS `/var` for `/private/var`) is excluded from that repo again, and host mode commits there again. git prints the canonical root; the plugin now keeps the form it was given, so relative paths no longer walk out of the repo.

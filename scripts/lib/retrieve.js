@@ -18,7 +18,8 @@ function firstStateLine(body) {
   return sec.split('\n').slice(1).find((l) => l.trim()) || '';
 }
 
-function context(ctx, project) {
+// `notes`: lines that go right after the hub, such as a stale-hub warning.
+function context(ctx, project, { notes = [] } = {}) {
   const tasks = require('./tasks');
   const ideas = require('./ideas');
   const p = project ? projectName(project) : null;
@@ -37,6 +38,7 @@ function context(ctx, project) {
       out.push(`project ${p} — hub ${path.relative(ctx.vault, hub).replace(/\\/g, '/')}`, clip(para.join('\n').trim(), 800), `sections: ${heads.join(' · ') || 'none'}`);
     } else out.push(`project ${p} — no hub yet`);
   } else out.push('workspace level (no project)');
+  out.push(...notes);
   const all = tasks.listItems(ctx, p ? { project: p } : {});
   const active = all.filter((i) => i.status === 'in-progress' || i.status === 'todo');
   if (active.length) {

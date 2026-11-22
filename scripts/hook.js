@@ -54,6 +54,12 @@ function sessionContext(env, ws, sid, cwd) {
   o.dailyFile = dailyFile;
   o.projectNoteExists = !!o.project && !!require('./lib/projects').findHub(v, o.project);
   o.relatedHints = o.project && !o.projectNoteExists && r.mappedDir ? relatedCandidates(r.mappedDir, raw) : [];
+  // only the current project: two git calls in its repo
+  if (lang && o.projectNoteExists && r.mappedDir) {
+    const stale = require('./lib/stale');
+    const s = stale.check(v, { project: o.project, dir: path.join(r.mappedDir, raw) });
+    if (s) o.staleHub = stale.message(s);
+  }
   // Codex runs none of Claude Code's plugins or settings hooks
   if (env.host !== 'codex') o.others = require('./lib/neighbours').find({ home: env.home, cwd });
   return buildSessionContext(o);

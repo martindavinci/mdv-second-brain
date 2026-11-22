@@ -88,7 +88,7 @@ function workspaceCtx(env) {
   const v = config.vaultPathFor(cfg, name);
   return {
     name,
-    ctx: { vault: v, boardFile: path.join(v, config.boardPathFor(cfg, name)), lang: vault.languageFor(cfg, name) || 'en', sid: sessionOf(flags).sid, budgets: cfg.budgets },
+    ctx: { ws: name, vault: v, boardFile: path.join(v, config.boardPathFor(cfg, name)), lang: vault.languageFor(cfg, name) || 'en', sid: sessionOf(flags).sid, budgets: cfg.budgets },
   };
 }
 
@@ -479,11 +479,20 @@ async function cmdPlugins(env, args) {
 }
 
 // Broken links, orphans, stale in-progress items, missing frontmatter, duplicate names, empty folders.
+// Hubs the repo has outgrown, for every project of the workspace or only `project`.
+function staleHubs(env, ctx, project) {
+  if (env.cfg.local || !ctx.ws) return [];
+  const stale = require('./lib/stale');
+  const all = require('./lib/repos').discover(env.cfg, ctx.ws, ctx.vault).filter((r) => !r.reason && (!project || r.project === project));
+  return all.map((r) => stale.check(ctx.vault, r)).filter(Boolean);
+}
+
 function cmdHealth(env) {
   const { ctx } = workspaceCtx(env);
   const fix = !!env.flags.fix;
   const days = Number(str(env.flags.days) || 14);
   const r = require('./lib/health').check(ctx, { fix, days: days > 0 ? days : 14 });
+  r.staleHubs = staleHubs(env, ctx);
   if (fix && (r.fixed.length || r.removedFolders.length)) state.markCliWrite(ctx.vault, ctx.sid);
   const lines = [];
   const block = (label, items, show = (x) => x) => {
@@ -494,6 +503,7 @@ function cmdHealth(env) {
   block('broken links', r.broken, (b) => `${b.file} → [[${b.target}]]${b.fix ? ` (fix: ${b.fix})` : b.candidates.length ? ` (one of: ${b.candidates.join(', ')})` : ''}`);
   block('fixed links', r.fixed, (f) => `${f.file}: [[${f.target}]] → [[${f.to}]]`);
   block(`in progress, untouched for over ${days} days`, r.stale, (s) => `${s.name}${s.project ? ` (${s.project})` : ''} — ${s.days} days`);
+  block('hubs the repo has outgrown (a new tag or over 20 commits since their text changed)', r.staleHubs, (s) => `${s.hub} — ${s.tags.length ? `tags ${s.tags.join(', ')}; ` : ''}${s.commits} commits`);
   block('without frontmatter', r.noFrontmatter);
   block('duplicate names', r.duplicates, (d) => `${d.name}: ${d.files.join(', ')}`);
   block('empty folders', r.emptyFolders);
@@ -572,6 +582,8 @@ function runIndex(env, ctx) {
   require('./lib/indexes').rebuildIndexes(ctx);
   require('./lib/home').rebuildHome(ctx);
   const oversize = budget.check(ctx);
+  // git only for hubs whose text changed or that were never tracked
+  if (!cfg.local && ctx.ws) require('./lib/stale').track(ctx.vault, require('./lib/repos').discover(cfg, ctx.ws, ctx.vault).filter((r) => !r.reason));
   fs.mkdirSync(path.join(ctx.vault, '.brain'), { recursive: true });
   fs.writeFileSync(path.join(ctx.vault, '.brain', 'oversize.json'), JSON.stringify(oversize, null, 2) + '\n');
   state.prune(ctx.vault, stateDirOf(env), now);
@@ -624,7 +636,9 @@ function cmdCommit(env) {
 
 function cmdContext(env) {
   const { name: ws, ctx } = workspaceCtx(env);
-  const text = require('./lib/retrieve').context(ctx, cwdProject(env, ws));
+  const project = cwdProject(env, ws);
+  const notes = project ? staleHubs(env, ctx, projectName(project)).map(require('./lib/stale').message) : [];
+  const text = require('./lib/retrieve').context(ctx, project, { notes });
   return out(env, { text }, text);
 }
 

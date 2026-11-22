@@ -316,6 +316,123 @@ function collectLocal(ctx, cfg, ws, opts = {}) {
   return out;
 }
 
+// --- the network part: tags missing on the remote, GitHub draft releases and CI (gh), at most once per TTL ---
+
+const REMOTE_KINDS = new Set(['tag-not-pushed', 'draft-release', 'ci-failed']);
+const GITHUB_KINDS = new Set(['draft-release', 'ci-failed']);
+const CI_FAILED = new Set(['failure', 'timed_out', 'startup_failure']);
+const SLUG = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+
+// Never a prompt (a credential window, a terminal question) from a background run.
+function defaultRun(cmd, args, cwd) {
+  const { execFileSync } = require('node:child_process');
+  const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_COLOR: '1' };
+  return execFileSync(cmd, args, { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, timeout: 30000 });
+}
+
+function attempt(run, cmd, args, cwd) {
+  try {
+    return String(run(cmd, args, cwd));
+  } catch {
+    return null;
+  }
+}
+
+function githubSlug(url) {
+  const m = /github\.com[:/]+([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i.exec(String(url));
+  const slug = m && `${m[1]}/${m[2]}`;
+  return slug && SLUG.test(slug) ? slug : null;
+}
+
+function remoteFacts(run, r) {
+  const urls = new Map();
+  for (const line of (attempt(run, 'git', ['remote', '-v'], r.dir) || '').split('\n')) {
+    const m = /^(\S+)\t(\S+) \(fetch\)$/.exec(line.trim());
+    if (m) urls.set(m[1], m[2]);
+  }
+  if (!urls.size) return null;
+  const remote = urls.has('origin') ? 'origin' : [...urls.keys()][0];
+  const slug = githubSlug(urls.get(remote)) || [...urls.values()].map(githubSlug).find(Boolean) || null;
+  return { remote, slug };
+}
+
+function tagItems(run, r, remote) {
+  const local = (attempt(run, 'git', ['tag', '--list'], r.dir) || '').split('\n').map((x) => x.trim()).filter(Boolean);
+  if (!local.length) return [];
+  const listed = attempt(run, 'git', ['ls-remote', '--tags', remote], r.dir);
+  // unreachable remote: nothing is known, nothing is reported
+  if (listed === null) return [];
+  const there = new Set(listed.split('\n').map((l) => (/\trefs\/tags\/(.+?)(\^\{\})?$/.exec(l.trim()) || [])[1]).filter(Boolean));
+  const missing = local.filter((t) => !there.has(t));
+  if (!missing.length) return [];
+  const push = missing.every(plain) ? copy('Push tags', ['git', '-C', quote(r.dir), 'push', plain(remote), ...missing]) : copy('Push tags', ['git', '-C', quote(r.dir), 'push', plain(remote), '--tags']);
+  return [item('tag-not-pushed', { repo: r.dir, project: r.project, title: `${r.project}: ${plural(missing.length, 'tag')} not on ${remote}`, detail: missing.slice(0, 10).join(', ') + (missing.length > 10 ? ` +${missing.length - 10} more` : ''), actions: [push, openFolder(r.dir)] })];
+}
+
+function parseList(text) {
+  try {
+    const v = JSON.parse(text);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+function defaultBranch(run, r, remote) {
+  const head = attempt(run, 'git', ['symbolic-ref', '--short', `refs/remotes/${remote}/HEAD`], r.dir);
+  if (head && head.trim().startsWith(`${remote}/`)) return head.trim().slice(remote.length + 1);
+  for (const b of MAIN) if (attempt(run, 'git', ['rev-parse', '--verify', '-q', `refs/heads/${b}`], r.dir) !== null) return b;
+  return null;
+}
+
+function githubItems(run, r, remote, slug) {
+  const out = [];
+  const releases = parseList(attempt(run, 'gh', ['release', 'list', '-R', slug, '--json', 'tagName,isDraft,name', '-L', '20'], r.dir));
+  for (const rel of releases.filter((x) => x && x.isDraft && typeof x.tagName === 'string')) {
+    const name = typeof rel.name === 'string' && rel.name ? rel.name : rel.tagName;
+    out.push(item('draft-release', { repo: r.dir, ref: rel.tagName, project: r.project, title: `${r.project}: draft release ${name} not published`, detail: `${slug} has a draft release for ${rel.tagName}`, actions: [{ type: 'open-url', label: 'Open releases', url: `https://github.com/${slug}/releases` }, copy('Publish', ['gh', 'release', 'edit', plain(rel.tagName), '-R', slug, '--draft=false'])] }));
+  }
+  const branch = defaultBranch(run, r, remote);
+  if (branch && plain(branch)) {
+    const [last] = parseList(attempt(run, 'gh', ['run', 'list', '-R', slug, '--branch', branch, '-L', '1', '--json', 'conclusion,status,workflowName,url'], r.dir));
+    if (last && CI_FAILED.has(last.conclusion)) {
+      const url = typeof last.url === 'string' && /^https:\/\//.test(last.url) ? last.url : `https://github.com/${slug}/actions`;
+      const wf = typeof last.workflowName === 'string' && last.workflowName ? ` (${last.workflowName})` : '';
+      out.push(item('ci-failed', { repo: r.dir, ref: branch, project: r.project, title: `${r.project}: CI failed on ${branch}${wf}`, detail: `the latest run on ${branch} ended with ${last.conclusion}`, actions: [{ type: 'open-url', label: 'Open the run', url }] }));
+    }
+  }
+  return out;
+}
+
+// Tags need only git; drafts and CI need an authenticated gh, else the result says why they were skipped.
+function collectRemote(repos, { run = defaultRun } = {}) {
+  const facts = repos.map((r) => ({ r, f: remoteFacts(run, r) })).filter((x) => x.f);
+  const items = [];
+  for (const { r, f } of facts) if (plain(f.remote)) items.push(...tagItems(run, r, f.remote));
+  const onGithub = facts.filter((x) => x.f.slug);
+  if (!onGithub.length) return { ok: true, items };
+  try {
+    run('gh', ['auth', 'status'], onGithub[0].r.dir);
+  } catch (e) {
+    return { ok: false, reason: e && e.code === 'ENOENT' ? 'gh not found' : 'gh not authenticated or offline', items };
+  }
+  for (const { r, f } of onGithub) items.push(...githubItems(run, r, f.remote, f.slug));
+  return { ok: true, items };
+}
+
+// Within the TTL the previous remote items are reused (for repos still in the workspace) and nothing goes out; when
+// gh fails, the last known GitHub items stay and the remote says it is not ok.
+function remoteStep(prev, repos, { run = defaultRun, now = new Date(), ttlHours = 6, force = false } = {}) {
+  const before = (prev && prev.remote) || {};
+  const dirs = new Set(repos.map((r) => normalize(r.dir)));
+  const kept = (kinds) => ((prev && prev.items) || []).filter((i) => kinds.has(i.kind) && i.repo && dirs.has(normalize(i.repo)));
+  const tried = Date.parse(before.tried || '');
+  if (!force && Number.isFinite(tried) && now - tried < ttlHours * 3600000) return { remote: before, items: kept(REMOTE_KINDS), reused: true };
+  const r = collectRemote(repos, { run, now });
+  const remote = { ok: r.ok, ...(r.reason ? { reason: r.reason } : {}), ...(r.ok ? { at: now.toISOString() } : before.at ? { at: before.at } : {}), tried: now.toISOString() };
+  return { remote, items: r.ok ? r.items : [...r.items, ...kept(GITHUB_KINDS)] };
+}
+
 // --- episodes and the cache ---
 
 function computeEpisodes(prev, items, now = new Date()) {
@@ -393,6 +510,6 @@ function done(vault, id) {
 }
 
 module.exports = {
-  DONE_KINDS, cacheFile, questionsFile, writeAtomic, brainCommand, compareVersions, repoStatus,
+  DONE_KINDS, REMOTE_KINDS, cacheFile, questionsFile, writeAtomic, brainCommand, compareVersions, repoStatus, defaultRun, collectRemote, remoteStep,
   collectLocal, questionItems, addQuestion, readQuestions, computeEpisodes, buildCache, readCache, writeCache, visible, snooze, done,
 };

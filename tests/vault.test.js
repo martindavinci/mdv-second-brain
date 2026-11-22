@@ -99,6 +99,22 @@ test('per-workspace vault inside a parent repo gets excluded there', { skip: !ha
   assert.equal(read(join(parent, '.git', 'info', 'exclude')).match(/brain\//g).length, 1);
 });
 
+// git prints the canonical root (8.3 names expanded on Windows, symlinks resolved, macOS /var → /private/var):
+// the plugin keeps the form it was given, or path.relative walks out of the repo.
+test('a parent repo reached through a link still gets the vault excluded', { skip: !hasGit }, () => {
+  const { t, cfg, cfgFile } = setup({ language: 'en' });
+  const real = join(t, 'real');
+  fs.mkdirSync(real, { recursive: true });
+  git.init(real);
+  const link = join(t, 'link');
+  fs.symlinkSync(real, link, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.equal(git.toplevel(join(link, 'sub')).toLowerCase(), link.replace(/\\/g, '/').toLowerCase());
+  cfg.workspaces.w.vault = join(link, 'brain');
+  const r = vault.ensureVault(cfg, 'w', { cfgFile });
+  assert.match(read(join(real, '.git', 'info', 'exclude')), /^\/brain\/$/m);
+  assert.deepEqual(vault.repoFor(cfg, 'w', r.vault), { repo: r.vault, pathspec: '.' });
+});
+
 test('applyGitConfig sets identity only when different', { skip: !hasGit }, () => {
   const { cfg, cfgFile } = setup({ language: 'en', git: { mode: 'per-workspace', config: { 'user.name': 'Test Brain', 'user.email': 'brain@example.invalid' } } });
   const r = vault.ensureVault(cfg, 'w', { cfgFile });

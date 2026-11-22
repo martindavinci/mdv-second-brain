@@ -58,11 +58,14 @@ function existingDir(dir) {
   return d;
 }
 
+// The root in the form the caller used: --show-toplevel is canonical (8.3 names expanded, symlinks and junctions
+// resolved, macOS /var → /private/var), so path.relative against the caller's paths would walk out of the repo.
 function toplevel(dir) {
   const d = existingDir(dir);
   if (!d) return null;
   try {
-    return run(d, ['rev-parse', '--show-toplevel']) || null;
+    if (run(d, ['rev-parse', '--is-inside-work-tree']) !== 'true') return null;
+    return path.resolve(d, run(d, ['rev-parse', '--show-cdup'])).replace(/\\/g, '/');
   } catch {
     return null;
   }

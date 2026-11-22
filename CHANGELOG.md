@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: a vault inside a parent repo reached through a different form of its path (a Windows 8.3 short name such as `RUNNER~1`, a junction or symlink, macOS `/var` for `/private/var`) is excluded from that repo again, and host mode commits there again. git prints the canonical root; the plugin now keeps the form it was given, so relative paths no longer walk out of the repo.
+
 ## 0.5.1 — 2026-11-22
 
 - Skill and README: how to add a second folder (another drive, a second projects root) to an existing workspace, and how to move a workspace from a folder configuration (`--config-here`) to the global one, which is the only one seen from every mapped folder.

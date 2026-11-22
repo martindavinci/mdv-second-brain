@@ -71,11 +71,18 @@ function walk(dir, top, archive, out) {
   return out;
 }
 
+// Case- and accent-insensitive: "perche" finds "perché", "CITTÀ" finds "città".
+const fold = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
 function search(ctx, query, { project, type, limit = 10, archive = false } = {}) {
   const tasks = require('./tasks');
-  const terms = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const terms = fold(String(query || '')).split(/\s+/).filter(Boolean);
   if (!terms.length) return [];
-  const has = (s) => terms.every((t) => s.toLowerCase().includes(t));
+  const count = (s) => {
+    const f = fold(s);
+    return terms.filter((t) => f.includes(t)).length;
+  };
+  const has = (s) => count(s) === terms.length;
   const wantProject = project ? projectName(project).toLowerCase() : null;
   const hits = [];
   for (const file of walk(ctx.vault, true, archive, [])) {
@@ -97,16 +104,29 @@ function search(ctx, query, { project, type, limit = 10, archive = false } = {})
     if (has(name)) consider(100, '', name);
     let heading = '';
     let inLog = false;
+    // no single line holds every term: the note still counts when it does as a whole, shown by the line with most
+    let partial = null;
+    const keep = (n, line) => {
+      if (n && (!partial || n > partial.n || (n === partial.n && partial.inLog && !inLog))) partial = { n, heading, line, inLog };
+    };
     for (const line of body.split('\n')) {
       const h = /^#{1,6}\s+(.*)$/.exec(line);
       if (h) {
         heading = h[1].trim();
         inLog = /^log$/i.test(heading);
         if (has(heading)) consider(10, heading, line);
+        // the title line repeats the note name, already matched above
+        else if (fold(heading) !== fold(name)) keep(count(heading), line);
         continue;
       }
-      if (line.trim() && has(line)) consider(inLog ? 0.5 : 1, heading, line);
+      if (!line.trim()) continue;
+      const n = count(line);
+      if (n === terms.length) consider(inLog ? 0.5 : 1, heading, line);
+      else keep(n, line);
     }
+    // boards and idea lists hold one unrelated item per line: terms spread over them match by chance
+    const listNote = data['kanban-plugin'] || /(^| )Ideas( Archive)?$/.test(name);
+    if (!best && partial && !listNote && has(`${name}\n${body}`)) consider(0.25, partial.heading, partial.line);
     if (best) hits.push({ path: path.relative(ctx.vault, file).replace(/\\/g, '/'), name, heading: best.heading, snippet: best.snippet, score: best.score });
   }
   return hits

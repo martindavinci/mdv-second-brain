@@ -4,6 +4,7 @@
 
 - Fix: a vault inside a parent repo reached through a different form of its path (a Windows 8.3 short name such as `RUNNER~1`, a junction or symlink, macOS `/var` for `/private/var`) is excluded from that repo again, and host mode commits there again. git prints the canonical root; the plugin now keeps the form it was given, so relative paths no longer walk out of the repo.
 - CI runs the tests on Linux, Windows and macOS with Node 18 (the minimum in `engines`) and 24.
+- `brain search` finds a note whose words sit on different lines (until now every word had to be on one line, heading or name). Such notes come after every note with the words on one line, shown by the line holding most of them; boards and idea lists are left out of this, since their lines are unrelated items. Accents no longer matter: `perche` finds "perché".
 
 ## 0.5.1 — 2026-11-22
 

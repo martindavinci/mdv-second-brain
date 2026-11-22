@@ -27,6 +27,30 @@ test('search ranks names over body, skips archive by default, caps snippets', ()
   assert.equal(retrieve.search(ctx, 'parser', { limit: 1 }).length, 1);
 });
 
+test('search finds a note whose terms sit on different lines, below notes with them on one line', () => {
+  const { ctx, vault: v } = makeVault();
+  write(join(v, '10_Notes', 'Spread.md'), '# Spread\n\n## Cause\ngit prints the canonical toplevel.\n\n## Repro\nA junction to the repo.\n');
+  write(join(v, '10_Notes', 'Together.md'), '# Together\n\n## Log\n- toplevel through a junction\n');
+  write(join(v, '10_Notes', 'Half.md'), '# Half\n\nonly toplevel here\n');
+  const hits = retrieve.search(ctx, 'toplevel junction', {});
+  assert.deepEqual(hits.map((h) => h.name), ['Together', 'Spread']);
+  assert.match(hits[1].snippet, /toplevel|junction/);
+  assert.ok(['Cause', 'Repro'].includes(hits[1].heading));
+  write(join(v, '10_Notes', 'Parser.md'), '# Parser\n\n## Grammar rules\nnothing\n');
+  assert.deepEqual(retrieve.search(ctx, 'parser grammar', {}).map((h) => [h.name, h.heading]), [['Parser', 'Grammar rules']]);
+  write(join(v, '00_Inbox', 'Plan.md'), '---\nkanban-plugin: board\n---\n\n## ToDo\n\n- [ ] [[Lexer speed]]\n- [ ] [[Token cache]]\n');
+  write(join(v, '00_Inbox', 'Ideas.md'), '# Ideas\n\n## alpha\n- [ ] lexer in wasm\n- [ ] token stats\n');
+  assert.deepEqual(retrieve.search(ctx, 'lexer token', {}), []);
+});
+
+test('search ignores accents on both sides', () => {
+  const { ctx, vault: v } = makeVault();
+  write(join(v, '10_Notes', 'Perché.md'), '# Perché\n\nLa città usa il caffè.\n');
+  assert.deepEqual(retrieve.search(ctx, 'perche', {}).map((h) => h.name), ['Perché']);
+  assert.equal(retrieve.search(ctx, 'citta caffe', {})[0].snippet, 'La città usa il caffè.');
+  assert.deepEqual(retrieve.search(ctx, 'CITTÀ', {}).map((h) => h.name), ['Perché']);
+});
+
 test('search prefers current notes over log lines', () => {
   const { ctx } = makeVault();
   const a = tasks.addItem(ctx, 'task', { title: 'Alpha Work' });

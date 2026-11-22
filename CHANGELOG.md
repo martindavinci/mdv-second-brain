@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.1 — 2026-11-23
 
 - The attention feed: every item except a question carries its own "Snooze until tomorrow" command to copy, so an app reading the feed can offer it without knowing the tool behind it.
 

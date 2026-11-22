@@ -161,8 +161,18 @@ function detectIdentity(dir, { vaultDir, home = require('node:os').homedir() } =
     const id = localIdentity(start);
     if (id) return { ...id, source: 'repo' };
   }
+  // Compared as real paths: a folder reached through an 8.3 name (RUNNER~1), a junction or a symlink still
+  // stops at the home folder, whose .gitconfig is the global identity, not a folder's.
   const { normalize } = require('./paths');
-  for (let d = start; normalize(d) !== normalize(home); d = path.dirname(d)) {
+  const real = (p) => {
+    try {
+      return normalize(fs.realpathSync.native(p));
+    } catch {
+      return normalize(p);
+    }
+  };
+  const stop = real(home);
+  for (let d = start; real(d) !== stop; d = path.dirname(d)) {
     const file = path.join(d, '.gitconfig');
     if (fs.existsSync(file)) {
       const name = tryRun(d, ['config', '-f', file, '--get', 'user.name']);

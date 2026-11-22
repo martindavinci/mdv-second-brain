@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const { join } = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { read, write, io } = require('./helpers');
+const { read, write, io, asOtherAccount } = require('./helpers');
 const { main } = require('../scripts/brain');
 const { defaults, saveConfig } = require('../scripts/lib/config');
 const frontmatter = require('../scripts/lib/frontmatter');
@@ -153,13 +153,7 @@ test('a repo git cannot read keeps its Repo section and record instead of lookin
   assert.equal((await w.brain('bootstrap')).code, 0);
   const before = read(w.hub('app'));
   const record = read(join(w.vault, '.brain', 'repos.json'));
-  process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER = '1';
-  let r;
-  try {
-    r = await w.brain('--json', 'bootstrap');
-  } finally {
-    delete process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER;
-  }
+  const r = await asOtherAccount(() => w.brain('--json', 'bootstrap'));
   assert.equal(r.code, 0, r.err);
   assert.equal(r.json().repos.find((x) => x.project === 'app').status, 'unreadable');
   assert.equal(read(w.hub('app')), before);

@@ -9,6 +9,7 @@ const { join } = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { main } = require('../scripts/brain');
 const git = require('../scripts/lib/git');
+const { asOtherAccount } = require('./helpers');
 
 const gitIn = (dir, args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
@@ -18,15 +19,6 @@ function io(cwd, env) {
   return { cwd, env, stdout: { write: (s) => out.push(s) }, stderr: { write: (s) => err.push(s) }, out, err };
 }
 
-// Every git command in the block sees the repos as another account's, like the Codex sandbox user does.
-async function asOtherAccount(fn) {
-  process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER = '1';
-  try {
-    return await fn();
-  } finally {
-    delete process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER;
-  }
-}
 
 async function setup() {
   const t = fs.mkdtempSync(join(os.tmpdir(), 'sb-owner-'));

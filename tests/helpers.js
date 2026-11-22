@@ -42,4 +42,19 @@ function io() {
   return { out, err, stdout: { write: (s) => out.push(s) }, stderr: { write: (s) => err.push(s) }, text: () => out.join(''), errText: () => err.join('') };
 }
 
-module.exports = { read, write, makeVault, daysAgo, ymd, io };
+// Every git command in the block sees the repos as another account's, like the Codex sandbox user does. git's own
+// config is left out: a safe.directory=* in it (the macOS runner's ~/.gitconfig, many machines) trusts every repo.
+async function asOtherAccount(fn) {
+  const keys = ['GIT_TEST_ASSUME_DIFFERENT_OWNER', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'];
+  const saved = keys.map((k) => process.env[k]);
+  const empty = join(fs.mkdtempSync(join(os.tmpdir(), 'sb-gitcfg-')), 'gitconfig');
+  fs.writeFileSync(empty, '');
+  Object.assign(process.env, { GIT_TEST_ASSUME_DIFFERENT_OWNER: '1', GIT_CONFIG_GLOBAL: empty, GIT_CONFIG_NOSYSTEM: '1' });
+  try {
+    return await fn();
+  } finally {
+    keys.forEach((k, i) => (saved[i] === undefined ? delete process.env[k] : (process.env[k] = saved[i])));
+  }
+}
+
+module.exports = { read, write, makeVault, daysAgo, ymd, io, asOtherAccount };

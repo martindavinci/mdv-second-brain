@@ -85,6 +85,21 @@ test('F2 detectIdentity falls back to the author of the last commit', { skip: !h
   assert.deepEqual([parent.source, parent.email], ['log', 'log@example.invalid']);
 });
 
+test('F2 detectIdentity stops at the home folder reached through another form of its path', { skip: !hasGit }, () => {
+  const t = fs.mkdtempSync(join(os.tmpdir(), 'sb-f2h-'));
+  const home = join(t, 'home');
+  write(join(home, '.gitconfig'), '[user]\n\tname = Global\n\temail = global@example.invalid\n');
+  const repo = join(home, 'work', 'repo');
+  git.init(repo);
+  write(join(repo, 'x.txt'), 'x');
+  git.run(repo, ['add', '-A']);
+  git.run(repo, ['-c', 'user.name=Log Person', '-c', 'user.email=log@example.invalid', 'commit', '-q', '-m', 'x']);
+  const link = join(t, 'link');
+  fs.symlinkSync(home, link, process.platform === 'win32' ? 'junction' : 'dir');
+  const id = git.detectIdentity(join(link, 'work', 'repo'), { home });
+  assert.deepEqual([id.source, id.email], ['log', 'log@example.invalid']);
+});
+
 // --- F3: pathspecs are literal ---
 
 test('F3 the pathspec team[1] is literal and never matches team1', { skip: !hasGit }, () => {

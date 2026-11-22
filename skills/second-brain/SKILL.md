@@ -10,20 +10,19 @@ You keep an Obsidian-compatible vault for the current workspace while you work. 
 CLI: `node "${CLAUDE_SKILL_DIR}/../../scripts/brain.js" --session ${CLAUDE_SESSION_ID} <command>` — written `brain <command>` below. When the session context has a `cli:` line, use that one. Always pass `--session`. If `${CLAUDE_SKILL_DIR}` was not substituted, the CLI is `scripts/brain.js` in this plugin's folder.
 
 ## Activation (only when the user asks)
-Outside a workspace the plugin is inert until the user asks.
-- Guided (`/brain init` or `$second-brain init`, "attiva brain qui", "attiva brain per questa chat"): run `brain --json init --plan`, then ask ONE round of at most 4 questions with the host's question tool (AskUserQuestion, or request_user_input in Codex; else one plain message with numbered options). Recommended option first; skip what the plan already answers (`mapped` set → just bind with `brain init <mapped>`).
+- Guided (`/brain init` or `$second-brain init`, "attiva brain qui", "attiva brain per questa chat"): run `brain --json init --plan`, then ask ONE round of at most 4 questions with the host's question tool (AskUserQuestion / request_user_input in Codex; else one message, numbered options). Recommended option first; skip what the plan already answers (`mapped` set → just bind with `brain init <mapped>`).
   1. What to activate: this folder (recommended) / the parent folder with all its projects (offer when `parentHasRepos`) / only this project, everything inside it (no workspace) / only this chat.
-  2. Workspace: new `<defaultName>` (recommended) / an existing one from `workspaces` (the only time other workspace names may be shown).
+  2. Workspace: new `<defaultName>` (recommended) / an existing one from `workspaces` (only here may other workspace names be shown): the folder joins it.
   3. Vault: common root `<defaultVault>` (recommended) / inside the folder `<insideVault>` / a custom path.
   4. Git: own repo with the detected identity (show `identity.name <identity.email>`; recommended) / own repo with the global identity / no git / inside the repo that contains the vault.
-  Never ask the language: use the code of the user's chat language.
+  Never ask the language: use the chat language's code.
   Then run `brain init <ws> --path <dir> [--vault <dir>] --git-mode per-workspace|none|host [--identity detected|global] --language <code>`.
   For "only this project" skip questions 2–3: `brain init --here --language <code>` plus the git flags (all in `<folder>/SecondBrain`).
   For "only this chat" never map the folder: a new workspace is `brain workspace add <ws> --language <code> [--vault <dir>]`, then `brain attach <ws>`.
 - Quick ("attiva brain con i default", `/brain init --quick` or `$second-brain init --quick`): `brain init --quick --language <code>`, no questions.
 - Off for this chat ("disattiva brain"): `brain detach`.
 Finish with the single line the CLI prints.
-`init` exit 8 (sandbox cannot write the config): give the user the ways out it lists; `--config-here` only if they pick it.
+`init` exit 8 (sandbox cannot write the config): give the user the ways out it lists; `--config-here` only if they pick it; it is unseen outside that folder (multi-folder workspaces: global config).
 Config: only `brain init`/`brain workspace …`, as the user asks; never hand-edit it or drop a setting (e.g. `ignore`) unasked.
 Bootstrap (`/brain bootstrap`, "importa le repo", or `brain status` shows `repos:`): follow `bootstrap.md` next to this file.
 

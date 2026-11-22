@@ -109,6 +109,7 @@ A folder full of repos? `/brain bootstrap` gives each git repo directly under th
 - `git.identity`: the commit identity of that workspace, found at activation — the folder's repo, a `.gitconfig` in the folder or above it, the repos inside it, or the author of the latest commit there; the global identity is never stored. It is passed to each commit (`git -c`), so shared repos never collect identities; in `host` mode a repo with its own identity keeps it.
 - `git.config`: local git settings written into the vault's own repo (`per-workspace` only), so commits you make there by hand match. Global git config is never changed.
 - `language: auto`: the vault language is fixed from your chat language at activation.
+- `paths`: one workspace can span several folders, also on different drives (`brain workspace map <dir> <ws>`); each project is the first subfolder of the mapped folder it sits in. A configuration kept in a folder (`--config-here`) is only found from inside that folder, so a workspace spanning folders belongs in the global configuration.
 - Only the values that differ from the defaults are saved, so new defaults reach you on update.
 
 ## Vault

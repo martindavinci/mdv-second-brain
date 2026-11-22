@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Skill and README: how to add a second folder (another drive, a second projects root) to an existing workspace, and how to move a workspace from a folder configuration (`--config-here`) to the global one, which is the only one seen from every mapped folder.
+
 ## 0.5.0 — 2026-10-30
 
 - Claude Code: when another plugin or settings hook named for Obsidian, a vault or a second brain also injects context at session start, the injected context names it and says that the vault's `AGENTS.md`, `WORKFLOW.md` and `TOOLS.md` govern every write. Disabled plugins and plugins installed for another project are left out; nothing is changed. Inspired by `vault_plugin_scan.py` of obsidian-second-brain.

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 — 2026-11-22
 
 - Skill and README: how to add a second folder (another drive, a second projects root) to an existing workspace, and how to move a workspace from a folder configuration (`--config-here`) to the global one, which is the only one seen from every mapped folder.
 

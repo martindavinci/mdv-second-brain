@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1 — 2026-11-22
+
+- Fix: the identity proposed at init no longer takes the global `~/.gitconfig` for a folder's own when the folder is reached through another form of the home path (a Windows 8.3 short name such as `RUNNER~1`, a junction or a symlink): the search for a `.gitconfig` now stops at the home folder compared as real paths.
+- Tests: the ownership tests keep git's global and system configuration out, so a `safe.directory=*` there (the macOS CI runner has one) no longer makes git trust every repo.
+
 ## 0.7.0 — 2026-11-22
 
 - **Stale hubs**: a hub is flagged when its repo got a new tag or more than 20 commits since the hub's own text last changed (generated sections and frontmatter do not count). The session-start context and `brain context` name it for the current project only, with what changed and what to do; `brain health` lists every project's. `brain index` and `brain commit` keep a hash of each hub's text and the repo's HEAD when it last changed in `.brain/hubs.json`; a hub never tracked starts from the repo as it was on its `updated` day. Repos are only read; the agent decides what to rewrite.

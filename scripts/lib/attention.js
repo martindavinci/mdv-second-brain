@@ -481,10 +481,13 @@ function visible(cache, now = new Date()) {
   return cache.items.filter((i) => !done.has(i.id) && !(snoozed[i.id] && Date.parse(snoozed[i.id]) > now.getTime()));
 }
 
+const emptyCache = () => ({ version: 1, at: null, remote: { ok: false, reason: 'not-checked' }, items: [], snoozed: {}, done: [], episodes: {} });
+
+// Any item of the queue, or a question queued since the last refresh.
 function snooze(vault, id, until) {
   return lock.withLock(vault, () => {
-    const cache = readCache(vault);
-    if (!cache || !cache.items.some((i) => i.id === id)) throw Object.assign(new Error('unknown-item'), { id });
+    const cache = readCache(vault) || emptyCache();
+    if (!cache.items.some((i) => i.id === id) && !readQuestions(vault).some((q) => q.id === id)) throw Object.assign(new Error('unknown-item'), { id });
     cache.snoozed = { ...cache.snoozed, [id]: until.toISOString() };
     writeCache(vault, cache);
     return { id, until: cache.snoozed[id] };
@@ -509,7 +512,64 @@ function done(vault, id) {
   });
 }
 
+// The cache with its questions read again from their file: one queued or answered since the last refresh shows.
+function withQuestions(cache, vault, now = new Date(), brain) {
+  const c = cache || emptyCache();
+  return { ...c, items: [...c.items.filter((i) => i.kind !== 'question'), ...computeEpisodes(c, questionItems(vault, brain), now)] };
+}
+
+function logOnce(env, previous, dir, message) {
+  if (previous === message || !env.cfgFile) return;
+  try {
+    const log = path.join(path.dirname(env.cfgFile), 'error.log');
+    fs.mkdirSync(path.dirname(log), { recursive: true });
+    fs.appendFileSync(log, `${new Date().toISOString()} attention feed ${dir}: ${message}
+`);
+  } catch {}
+}
+
+// Every feed output of the workspace; a folder that fails is remembered in the cache and logged once.
+function writeOutputs(env, ws, cache, now = new Date()) {
+  const feed = require('./feed');
+  const { attentionFor } = require('./config');
+  const before = cache.outputErrors || {};
+  const errors = {};
+  const obj = feed.build(cache, ws, now);
+  for (const o of attentionFor(env.cfg, ws).outputs) {
+    try {
+      feed.write(o.dir, ws, obj);
+    } catch (e) {
+      errors[o.dir] = String((e && e.message) || e);
+      logOnce(env, before[o.dir], o.dir, errors[o.dir]);
+    }
+  }
+  return errors;
+}
+
+// The whole queue again: local facts every time, the network part when its TTL ran out (or `remote`), then under the
+// vault lock the latest snoozes, done marks and questions are merged and the cache and feeds written.
+// env: { cfg, cfgFile, home, run, now, cli }.
+function refresh(env, ctx, ws, { remote = false } = {}) {
+  const { attentionFor } = require('./config');
+  const now = env.now || new Date();
+  const att = attentionFor(env.cfg, ws);
+  const brain = brainCommand({ cli: env.cli, cfgFile: env.cfgFile, ws });
+  const repos = require('./repos').discover(env.cfg, ws, ctx.vault).filter((r) => !r.reason);
+  const prev = readCache(ctx.vault);
+  const local = collectLocal(ctx, env.cfg, ws, { now, home: env.home, brain }).filter((i) => i.kind !== 'question');
+  const net = remoteStep(prev, repos, { run: env.run || defaultRun, now, ttlHours: att.remoteTtlHours, force: remote });
+  return lock.withLock(ctx.vault, () => {
+    const latest = readCache(ctx.vault) || prev;
+    const items = computeEpisodes(latest, [...local, ...net.items, ...questionItems(ctx.vault, brain)], now);
+    const cache = buildCache(latest, items, now, net.remote, { outputErrors: (latest && latest.outputErrors) || {} });
+    cache.outputErrors = writeOutputs(env, ws, cache, now);
+    writeCache(ctx.vault, cache);
+    return cache;
+  });
+}
+
 module.exports = {
   DONE_KINDS, REMOTE_KINDS, cacheFile, questionsFile, writeAtomic, brainCommand, compareVersions, repoStatus, defaultRun, collectRemote, remoteStep,
   collectLocal, questionItems, addQuestion, readQuestions, computeEpisodes, buildCache, readCache, writeCache, visible, snooze, done,
+  withQuestions, writeOutputs, refresh,
 };

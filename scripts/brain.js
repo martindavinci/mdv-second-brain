@@ -12,7 +12,7 @@ const { resolveWorkspace, projectFor } = require('./lib/resolve');
 const { projectName, parseYmd } = require('./lib/names');
 const { locate, folderConfigFile, LOCAL_VAULT } = require('./lib/locate');
 
-const BOOL = new Set(['json', 'yes', 'blocked', 'open', 'quick', 'apply', 'archive', 'plan', 'here', 'config-here', 'remove', 'dry-run', 'fix', 'day', 'week', 'month']);
+const BOOL = new Set(['json', 'yes', 'blocked', 'open', 'quick', 'apply', 'archive', 'plan', 'here', 'config-here', 'remove', 'dry-run', 'fix', 'day', 'week', 'month', 'refresh', 'remote', 'quiet']);
 const GIT_MODES = ['per-workspace', 'single', 'none', 'host'];
 
 function parseArgs(argv) {
@@ -717,19 +717,83 @@ function cmdContext(env) {
   return out(env, { text }, text);
 }
 
-// This session's daily checkpoint, written by the CLI so the agent never edits the shared daily file.
+// This session's daily checkpoint, written by the CLI so the agent never edits the shared daily file. `--ask` queues a
+// question for the user in the attention queue (the daily is not touched by it).
 function cmdCheckpoint(env) {
   const daily = require('./lib/daily');
   const { sid } = sessionOf(env.flags);
   if (!sid) throw new CliError(2, 'checkpoint needs --session <id>');
-  const { ctx } = workspaceCtx(env);
-  const s = state.load(ctx.vault, sid);
-  const startedAt = s && s.startedAt ? s.startedAt : new Date();
+  const { name: ws, ctx } = workspaceCtx(env);
   const fields = { status: str(env.flags.status), next: str(env.flags.next), open: str(env.flags.open), log: str(env.flags.log) };
-  if (!Object.values(fields).some(Boolean)) throw new CliError(2, 'usage: brain checkpoint [--status …] [--next …] [--open …] [--log …]');
-  const r = daily.checkpoint(ctx.vault, ctx.lang, sid, startedAt, fields);
-  state.markCliWrite(ctx.vault, sid);
-  return out(env, r, 'checkpoint saved');
+  const ask = str(env.flags.ask);
+  if (!Object.values(fields).some(Boolean) && !ask) throw new CliError(2, 'usage: brain checkpoint [--status …] [--next …] [--open …] [--log …] [--ask "<question>"]');
+  if (ask && env.cfg.local) throw new CliError(2, 'project mode: questions go to the attention queue of a workspace, which project mode does not have; ask the user at the end of the reply instead');
+  const value = {};
+  const lines = [];
+  if (Object.values(fields).some(Boolean)) {
+    const s = state.load(ctx.vault, sid);
+    Object.assign(value, daily.checkpoint(ctx.vault, ctx.lang, sid, s && s.startedAt ? s.startedAt : new Date(), fields));
+    state.markCliWrite(ctx.vault, sid);
+    lines.push('checkpoint saved');
+  }
+  if (ask) {
+    value.question = require('./lib/attention').addQuestion(ctx.vault, { session: sid, text: ask, project: cwdProject(env, ws), now: env.now });
+    lines.push(`question queued: ${value.question.id} — once the user answers: brain attention done ${value.question.id}`);
+  }
+  return out(env, value, lines.join('\n'));
+}
+
+function attentionEnv(env) {
+  return { cfg: env.cfg, cfgFile: env.cfgFile, home: env.home, run: env.run, now: env.now, cli: path.join(__dirname, 'brain.js') };
+}
+
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+// The queue of what waits for the user: from the cache (computed after each turn), `--refresh` computes it again,
+// `--remote` also asks the network now. `snooze <id> [--until YYYY-MM-DD]` hides an item; `done <id>` clears a question.
+function cmdAttention(env, sub, args) {
+  if (env.cfg.local) throw new CliError(2, 'project mode: brain attention needs a workspace (the vault outside the project)');
+  const attention = require('./lib/attention');
+  const feed = require('./lib/feed');
+  const { name: ws, ctx } = workspaceCtx(env);
+  const aenv = attentionEnv(env);
+  const now = env.now || new Date();
+  // checked even when only the cache is read: a broken block is reported where it is used
+  config.attentionFor(env.cfg, ws);
+  const brain = attention.brainCommand({ cli: aenv.cli, cfgFile: env.cfgFile, ws });
+  const rewriteFeeds = () => attention.writeOutputs(aenv, ws, attention.withQuestions(attention.readCache(ctx.vault), ctx.vault, now, brain), now);
+  switch (sub) {
+    case 'snooze': {
+      const id = requireArg(args[0], 'item id');
+      let until;
+      if (str(env.flags.until)) {
+        until = parseYmd(str(env.flags.until));
+        if (!until) throw new CliError(2, 'bad --until: use YYYY-MM-DD');
+        if (until <= now) throw new CliError(2, '--until must be a date after today');
+      } else until = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const r = attention.snooze(ctx.vault, id, until);
+      rewriteFeeds();
+      return out(env, r, `snoozed ${id} until ${require('./lib/names').ymd(until)}`);
+    }
+    case 'done': {
+      const r = attention.done(ctx.vault, requireArg(args[0], 'question id'));
+      rewriteFeeds();
+      return out(env, r, `answered: ${r.id}`);
+    }
+    case undefined: {
+      let cache = env.flags.refresh || env.flags.remote ? null : attention.readCache(ctx.vault);
+      if (!cache) cache = attention.refresh(aenv, ctx, ws, { remote: !!env.flags.remote });
+      if (env.flags.quiet) return undefined;
+      const f = feed.build(attention.withQuestions(cache, ctx.vault, now, brain), ws, now);
+      const lines = f.items.map((i) => `- ${i.id} ${i.title}${i.detail ? ` — ${i.detail}` : ''}${i.severity === 'info' ? ' (info)' : ''}`);
+      const head = f.items.length ? `waiting for you: ${plural(f.items.length, 'item')}` : 'nothing waiting for you';
+      const net = f.remote.ok ? [] : [`remote: not checked${f.remote.reason ? ` (${f.remote.reason})` : ''}${f.remote.at ? `; last checked ${f.remote.at}` : ''}`];
+      const tail = f.items.length ? ['brain attention snooze <id> [--until YYYY-MM-DD] hides one; a question leaves with brain attention done <id>'] : [];
+      return out(env, f, [head, ...lines, ...net, ...tail].join('\n'));
+    }
+    default:
+      throw new CliError(2, `unknown attention command: ${sub}`);
+  }
 }
 
 // Mutating commands run under the vault lock (another session may be writing the same files).
@@ -805,9 +869,13 @@ const ERRORS = {
   'multiline-secret': () => new CliError(2, 'secret values must be one line: encode multi-line values (for example base64)'),
   'bad-community-plugins': () => new CliError(2, 'cannot read .obsidian/community-plugins.json of the vault (not a JSON list): fix or remove it, nothing was changed'),
   'invalid-config': () => new CliError(2, `invalid config file: ${config.configPath()}`),
+  'invalid-attention': (e) => new CliError(2, `invalid attention block for workspace ${e.ws}: ${e.detail}`),
+  'unknown-item': (e) => new CliError(2, `no item ${e.id} in the queue: brain attention lists them`),
+  'not-a-question': (e) => new CliError(2, `attention done is only for questions: a ${e.kind} item leaves the queue once it is solved; snooze it instead`),
+  'empty-question': () => new CliError(2, 'empty question'),
 };
 
-const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|checkpoint|context|show|search|project|postmortem|workspace|secret|plugins|health|check|recap|index|commit|status|adopt> …';
+const USAGE = 'usage: brain <init|attach|detach|task|issue|feature|idea|checkpoint|attention|context|show|search|project|postmortem|workspace|secret|plugins|health|check|recap|index|commit|status|adopt> …';
 
 async function main(argv, io = {}) {
   const stdout = io.stdout || process.stdout;
@@ -821,7 +889,8 @@ async function main(argv, io = {}) {
   const cfgFile = str(flags.config) || locate(cwd, { globalFile }) || globalFile;
   try {
     const cfg = config.loadConfig(cfgFile);
-    const env = { cfg, cfgFile, flags, cwd, stdout, stderr, fetch: io.fetch || globalThis.fetch };
+    // home, run (external commands) and now are injected by tests; the real ones otherwise
+    const env = { cfg, cfgFile, flags, cwd, stdout, stderr, fetch: io.fetch || globalThis.fetch, home: io.home, run: io.run, now: io.now };
     const [cmd, sub, ...rest] = pos;
     const args = [sub, ...rest].filter((x) => x !== undefined);
     if (cfg.local && (cmd === 'workspace' || cmd === 'adopt')) throw new CliError(2, 'project mode: this folder has its own brain; workspaces live in the global config (run the command outside this folder)');
@@ -890,6 +959,9 @@ async function main(argv, io = {}) {
         break;
       case 'checkpoint':
         cmdCheckpoint(env);
+        break;
+      case 'attention':
+        cmdAttention(env, sub, rest);
         break;
       case 'status':
       case undefined:

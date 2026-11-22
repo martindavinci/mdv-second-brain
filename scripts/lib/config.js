@@ -122,11 +122,37 @@ function boardPathFor(cfg, name) {
   return ws.board ?? DEFAULT_BOARD;
 }
 
+const DEFAULT_REMOTE_TTL_HOURS = 6;
+
+// `workspaces.<name>.attention`: { outputs: [{ type: 'feed', dir: '<absolute folder>' }], remoteTtlHours: 6 }.
+// Checked where it is used, so a mistake there never stops the rest of the brain.
+function attentionFor(cfg, name) {
+  const a = ((cfg.workspaces || {})[name] || {}).attention;
+  const bad = (detail) => Object.assign(new Error('invalid-attention'), { ws: name, detail });
+  if (a === undefined) return { outputs: [], remoteTtlHours: DEFAULT_REMOTE_TTL_HOURS };
+  if (!isPlainObject(a)) throw bad('attention must be an object');
+  const extra = Object.keys(a).filter((k) => k !== 'outputs' && k !== 'remoteTtlHours');
+  if (extra.length) throw bad(`unknown key ${extra[0]} (use outputs, remoteTtlHours)`);
+  if (a.outputs !== undefined && !Array.isArray(a.outputs)) throw bad('outputs must be a list');
+  const outputs = (a.outputs || []).map((o, i) => {
+    const at = `outputs[${i}]`;
+    if (!isPlainObject(o) || o.type !== 'feed') throw bad(`${at}.type must be "feed"`);
+    const keys = Object.keys(o).filter((k) => k !== 'type' && k !== 'dir');
+    if (keys.length) throw bad(`${at}: unknown key ${keys[0]} (a feed has type and dir)`);
+    const dir = typeof o.dir === 'string' ? expandHome(o.dir.trim()) : '';
+    if (!dir || !path.isAbsolute(dir)) throw bad(`${at}.dir must be an absolute folder`);
+    return { type: 'feed', dir };
+  });
+  const ttl = a.remoteTtlHours === undefined ? DEFAULT_REMOTE_TTL_HOURS : a.remoteTtlHours;
+  if (typeof ttl !== 'number' || !Number.isFinite(ttl) || ttl < 0) throw bad('remoteTtlHours must be a number of hours, 0 or more');
+  return { outputs, remoteTtlHours: ttl };
+}
+
 function assertWorkspaceName(name) {
   if (typeof name !== 'string' || !/^[a-z0-9][a-z0-9_-]*$/i.test(name)) throw new Error('invalid-workspace-name');
 }
 
 module.exports = {
   DEFAULT_BOARD, defaults, configPath, configDir, stateDir, loadConfig, saveConfig, localConfigFile,
-  vaultPathFor, boardPathFor, assertWorkspaceName,
+  vaultPathFor, boardPathFor, assertWorkspaceName, attentionFor, DEFAULT_REMOTE_TTL_HOURS,
 };

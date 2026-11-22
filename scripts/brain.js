@@ -752,6 +752,40 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 // The queue of what waits for the user: from the cache (computed after each turn), `--refresh` computes it again,
 // `--remote` also asks the network now. `snooze <id> [--until YYYY-MM-DD]` hides an item; `done <id>` clears a question.
 function cmdAttention(env, sub, args) {
+  if (!env.flags.quiet || sub !== undefined) return attentionCommand(env, sub, args);
+  // the detached run after a turn has no stderr: its error goes to the log, once while it repeats
+  try {
+    return attentionCommand(env, sub, args);
+  } catch (e) {
+    const err = e instanceof CliError ? e : ERRORS[e.message] ? ERRORS[e.message](e) : e;
+    logOnce(path.join(path.dirname(env.cfgFile), 'error.log'), `attention --refresh: ${(err && err.message) || err}`);
+    return undefined;
+  }
+}
+
+// Appends the line unless the end of the log already holds it.
+function logOnce(file, message) {
+  let tail = '';
+  try {
+    const fd = fs.openSync(file, 'r');
+    try {
+      const size = fs.fstatSync(fd).size;
+      const buf = Buffer.alloc(Math.min(size, 4096));
+      fs.readSync(fd, buf, 0, buf.length, size - buf.length);
+      tail = buf.toString('utf8');
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {}
+  if (tail.includes(message)) return;
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, `${new Date().toISOString()} ${message}
+`);
+  } catch {}
+}
+
+function attentionCommand(env, sub, args) {
   if (env.cfg.local) throw new CliError(2, 'project mode: brain attention needs a workspace (the vault outside the project)');
   const attention = require('./lib/attention');
   const feed = require('./lib/feed');

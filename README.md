@@ -16,6 +16,7 @@ It is the agent's second brain for software work, not a personal one: it capture
 - **Never forgets.** Hooks track what changed in the session; if Claude edited your project but not the vault, it is reminded once before it stops. If a session dies, the next one starts from the last checkpoint.
 - **Strict isolation.** A workspace's vault never mentions another workspace.
 - **Inert elsewhere.** Outside a workspace the plugin prints nothing and writes nothing until you activate it.
+- **Nothing waits unnoticed.** After each turn the plugin works out, in the background, what waits for you — commits and tags to push, a draft release, a failed CI run, a question a session queued — and the next session opens with one line about it. Other apps can read the same queue as a JSON feed.
 - **Small context.** The vault is meant to be read by an agent: short injected context, size budgets, rotation of long logs, and bounded reads (`context`, `show --section`, `search`).
 
 ## Requirements
@@ -94,6 +95,7 @@ A folder full of repos? `/brain bootstrap` gives each git repo directly under th
       "vault": "<optional custom vault path>",
       "language": "<language code>",
       "board": "00_Inbox/Plan.md",
+      "attention": { "outputs": [{ "type": "feed", "dir": "<folder a reader app watches>" }], "remoteTtlHours": 6 },
       "git": {
         "mode": "per-workspace",
         "identity": { "name": "<commit name>", "email": "<commit email>" },
@@ -110,6 +112,7 @@ A folder full of repos? `/brain bootstrap` gives each git repo directly under th
 - `git.config`: local git settings written into the vault's own repo (`per-workspace` only), so commits you make there by hand match. Global git config is never changed.
 - `language: auto`: the vault language is fixed from your chat language at activation.
 - `paths`: one workspace can span several folders, also on different drives (`brain workspace map <dir> <ws>`); each project is the first subfolder of the mapped folder it sits in. A configuration kept in a folder (`--config-here`) is only found from inside that folder, so a workspace spanning folders belongs in the global configuration.
+- `attention`: optional. `outputs` lists folders where the attention queue is exported as `brain-<workspace>.json` (format in [`docs/feed-format.md`](docs/feed-format.md)); the folder must exist. `remoteTtlHours`: how often, at most, GitHub and the remotes are asked (default 6).
 - Only the values that differ from the defaults are saved, so new defaults reach you on update.
 
 ## Vault
@@ -148,6 +151,19 @@ A playbook is a recipe for a family of projects ("a new Android app of the suite
 
 Each wildcard folder is checked on its own, so a monorepo gets one result per app. A project follows a playbook only when its hub says so (`brain project playbook`); then the session context names the playbook and its failing checks, `brain check` lists them and the agent runs it before a tag. A repo that looks like a family (`applies_when`) but does not follow its playbook gets a suggestion, never a link. Nothing is run and nothing in the project is written.
 
+## Attention
+
+`brain attention` lists what waits for you in the workspace, computed from facts and never from notes:
+
+- commits not pushed to their upstream, `main`/`master` without an upstream, local tags missing on the remote, a working tree left uncommitted for more than three days;
+- GitHub draft releases and a failed last CI run of the default branch (through `gh`, when it is installed and logged in);
+- failing playbook checks, outgrown hubs, playbook suggestions, items in progress untouched for over 14 days;
+- a Claude Code plugin whose repo is in the workspace and released a newer version than the one installed;
+- questions an agent queued for you with `brain checkpoint --ask`;
+- the vault's own commits, when the oldest one not pushed is more than three days old.
+
+After each turn the Stop hook starts `brain attention --refresh` in the background (detached, silent, at most once every two minutes per workspace) and the result is kept in `.brain/attention.json`; GitHub and the remotes are asked at most every `remoteTtlHours`. The next session starts with one line such as `waiting for the user: 2 to push, 1 draft release, 1 question`, and the agent mentions it once. Each item carries the command to copy (built by the plugin, never run by it). An item keeps its id while it lasts; once solved it leaves the queue, and if it comes back it is new. `brain attention snooze <id>` hides an item until a date; `brain attention done <id>` clears an answered question. Project mode has no queue.
+
 ## Commands
 
 `/brain <command>` in Claude Code, `$second-brain <command>` in Codex, or plain language. The CLI is `node scripts/brain.js`.
@@ -172,7 +188,9 @@ Each wildcard folder is checked on its own, so a monorepo gets one result per ap
 | `brain check [<project>]` | the checks of the playbooks a project follows: each failing check with the folders it fails in; playbooks whose `applies_when` matches a repo that does not follow them are suggested |
 | `brain secret set` · `get` · `list` | values in `secrets.local.md`, referenced as `{{secret:KEY}}` |
 | `brain workspace add` · `list` · `map` · `ignore` | edit the config |
-| `brain checkpoint --status … --next … --open … --log …` | update this session's section of the daily (safe with parallel sessions) |
+| `brain checkpoint --status … --next … --open … --log …` | update this session's section of the daily (safe with parallel sessions); `--ask "<question>"` queues a question for the user in the attention queue |
+| `brain attention [--refresh] [--remote] [--json]` | what waits for you, from the cache; `--refresh` computes it again, `--remote` also asks GitHub and the remotes now; `--json` prints the feed object |
+| `brain attention snooze <id> [--until YYYY-MM-DD]` · `brain attention done <id>` | hide an item until a date (tomorrow by default); clear a question once answered |
 | `brain index` · `brain commit -m "<msg>"` · `brain status` | archive, rebuild indexes, move old-layout hubs to `20_Projects/<project>.md`, prune old session state, commit the vault; status also counts repos without a hub and names the plugins the vault needs that are missing |
 | `brain adopt <path> --as <ws> [--apply] [--language]` | adopt an existing vault in place: dry run first, files moved (never copied or deleted), path links rewritten, a `TASKS.md` checklist turned into cards |
 
@@ -181,6 +199,7 @@ Each wildcard folder is checked on its own, so a monorepo gets one result per ap
 - Nothing personal ships with the plugin: no paths, names or identities. Your configuration lives in `~/.config/mdv-second-brain/`.
 - Secrets go only in `secrets.local.md`; other `*.local.md` files hold private prose. Both are gitignored, and every commit is scanned for keys and passwords first.
 - The plugin never pushes.
+- The attention queue reads your repos with git and, at most every `remoteTtlHours`, asks your remotes for their tags (`git ls-remote`) and GitHub for draft releases and CI runs (`gh`, with your login). It sends nothing about the vault, and its cache and feed stay on your machine.
 - At session start in Claude Code it reads `~/.claude/settings.json`, the project's `.claude/settings*.json` and the `hooks/hooks.json` of installed plugins, only to notice other vault tooling (Obsidian, vault or second-brain hooks) that also injects a manual; it then tells the model that the vault's own rules govern. It changes nothing there and sends nothing anywhere.
 
 ## Development

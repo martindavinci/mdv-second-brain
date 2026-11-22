@@ -50,6 +50,12 @@ function sessionContext(env, ws, sid, cwd) {
     try {
       o.oversize = JSON.parse(fs.readFileSync(path.join(v, '.brain', 'oversize.json'), 'utf8'));
     } catch {}
+    // what waits for the user: only the cache the Stop hook keeps, never git or the network here
+    if (!cfg.local) {
+      try {
+        o.attentionLine = require('./lib/context').attentionLine(JSON.parse(fs.readFileSync(path.join(v, '.brain', 'attention.json'), 'utf8')), { now, project: o.project });
+      } catch {}
+    }
   }
   o.dailyFile = dailyFile;
   o.projectNoteExists = !!o.project && !!require('./lib/projects').findHub(v, o.project);
@@ -123,6 +129,31 @@ function touched(env, sid, abs, out, gone = false) {
   state.save(v, sid, s);
 }
 
+// After a turn: the attention queue of each workspace this session touched is computed again by a detached CLI run
+// (no wait, no output), at most once every two minutes per workspace. Project mode has no queue.
+function refreshAttention(env, idx) {
+  const { cfg, now } = env;
+  if (cfg.local || !env.spawn) return;
+  const { vaultPathFor } = require('./lib/config');
+  const vault = require('./lib/vault');
+  for (const ws of (idx && idx.workspaces) || []) {
+    try {
+      if (!cfg.workspaces[ws] || !vault.languageFor(cfg, ws)) continue;
+      const v = vaultPathFor(cfg, ws);
+      if (!fs.existsSync(path.join(v, '.brain'))) continue;
+      if (!require('./lib/attention').claimRefresh(v, now)) continue;
+      env.spawn(process.execPath, [env.cli, '--config', env.cfgFile, '--workspace', ws, 'attention', '--refresh', '--quiet'], { cwd: v, detached: true, stdio: 'ignore', windowsHide: true });
+    } catch {}
+  }
+}
+
+// The real spawner: the child outlives the hook, holds none of its pipes and shows no window.
+function detachedSpawn(cmd, args, options) {
+  const child = require('node:child_process').spawn(cmd, args, options);
+  child.on('error', () => {});
+  child.unref();
+}
+
 function handle(event, input, env) {
   const { loadConfig } = require('./lib/config');
   const state = require('./lib/state');
@@ -178,6 +209,7 @@ function handle(event, input, env) {
   if (event === 'stop') {
     if (input.stop_hook_active) return '';
     const { vaultPathFor } = require('./lib/config');
+    refreshAttention(env, idx);
     for (const ws of idx.workspaces || []) {
       if (!cfg.workspaces[ws]) continue;
       const v = vaultPathFor(cfg, ws);
@@ -207,7 +239,8 @@ function run(event, input, opts = {}) {
     if (!input || typeof input !== 'object') throw new Error('bad-input: hook stdin is not a JSON object');
     // a project's own config is not where the CLI looks by default from every folder: name it in the CLI line
     const cliConfig = isLocalFile(cfgFile) && !samePath(cfgFile, globalFile) ? cfgFile : null;
-    const env = { now: opts.now || new Date(), cli: opts.cli || DEFAULT_CLI, cliConfig, cfgFile, stateDir: path.join(configDir, 'state'), home: opts.home || os.homedir(), host: opts.host || 'claude' };
+    // spawn: only the real hook entry (main) starts processes; callers of run() inject their own or none
+    const env = { now: opts.now || new Date(), cli: opts.cli || DEFAULT_CLI, cliConfig, cfgFile, stateDir: path.join(configDir, 'state'), home: opts.home || os.homedir(), host: opts.host || 'claude', spawn: opts.spawn || null };
     return { stdout: handle(event, input, env) || '' };
   } catch (e) {
     try {
@@ -234,7 +267,7 @@ function main(argEvent) {
   try {
     // always read the event: the project config is found from its cwd, and leaving stdin unread fails the hook
     const input = readStdin();
-    out = run(argEvent || (input && EVENTS[input.hook_event_name]), input, { host: argEvent ? 'claude' : 'codex' }).stdout;
+    out = run(argEvent || (input && EVENTS[input.hook_event_name]), input, { host: argEvent ? 'claude' : 'codex', spawn: detachedSpawn }).stdout;
   } catch {}
   if (out) process.stdout.write(out);
   process.exitCode = 0;

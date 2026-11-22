@@ -1,6 +1,6 @@
 ---
 description: Second brain — activate it for a folder or chat (/brain init); in activated workspaces manage tasks, issues and ideas, search and commit the vault.
-argument-hint: "[init [--quick] | attach <ws> | detach | bootstrap | plugins [<id>…] | health [--fix] | recap [--week|--month] | task … | issue … | idea … | context | search <text> | project … | distill | postmortem <title> | index | commit -m <msg> | status]"
+argument-hint: "[init [--quick] | attach <ws> | detach | bootstrap | plugins [<id>…] | health [--fix] | recap [--week|--month] | task … | issue … | idea … | context | search <text> | attention [snooze|done <id>] | project … | distill | postmortem <title> | index | commit -m <msg> | status]"
 ---
 
 Use the second-brain skill for this request. Arguments: $ARGUMENTS
@@ -10,6 +10,7 @@ Use the second-brain skill for this request. Arguments: $ARGUMENTS
 - `health` → `brain health`; show the findings, run `--fix` only when the user agrees.
 - `bootstrap` → the skill's bootstrap procedure (`bootstrap.md` next to SKILL.md): dry run, renames only after the user confirms, hubs, prose, relations, commit.
 - `plugins [<id>…]` → `brain plugins [<id>…]`: Dataview, Kanban and Homepage by default; pass on the line about trusting the plugins that it prints.
+- `attention` → `brain attention`: what waits for the user (commits and tags to push, draft releases, failed CI, queued questions…); `snooze` or `done` only when the user says so.
 - `distill` → level 2 of the skill for the current work, then `brain commit -m "<summary>"`.
 - `postmortem <title>` → `brain postmortem add "<title>"`, fill every section from this session, put the lessons into the feature, then `brain commit -m "post mortem: <title>"`.
 - Anything else → run `brain <arguments>` with the CLI line from the skill and summarise the result in one or two lines.

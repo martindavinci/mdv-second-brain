@@ -568,8 +568,56 @@ function refresh(env, ctx, ws, { remote = false } = {}) {
   });
 }
 
+// --- the refresh after each turn ---
+
+const REFRESH_EVERY_MS = 2 * 60000;
+const refreshFile = (vault) => path.join(vault, '.brain', 'attention.refresh');
+
+// One refresh per workspace every two minutes, whichever session's Stop hook comes first: the claim is a file created
+// exclusively; a claim older than that is moved aside by exactly one hook (rename) before a new one is created.
+function claimRefresh(vault, now = new Date(), everyMs = REFRESH_EVERY_MS) {
+  const file = refreshFile(vault);
+  const take = () => {
+    try {
+      fs.writeFileSync(file, now.toISOString(), { flag: 'wx' });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  if (take()) return true;
+  let seen;
+  try {
+    seen = fs.readFileSync(file, 'utf8');
+  } catch {
+    return false;
+  }
+  const age = now - Date.parse(seen);
+  if (age >= 0 && age < everyMs) return false;
+  const aside = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}`;
+  try {
+    fs.renameSync(file, aside);
+  } catch {
+    return false;
+  }
+  let moved = null;
+  try {
+    moved = fs.readFileSync(aside, 'utf8');
+  } catch {}
+  if (moved !== seen) {
+    // another hook renewed the claim meanwhile: give it back
+    try {
+      fs.renameSync(aside, file);
+    } catch {}
+    return false;
+  }
+  fs.rmSync(aside, { force: true });
+  return take();
+}
+
 module.exports = {
   DONE_KINDS, REMOTE_KINDS, cacheFile, questionsFile, writeAtomic, brainCommand, compareVersions, repoStatus, defaultRun, collectRemote, remoteStep,
   collectLocal, questionItems, addQuestion, readQuestions, computeEpisodes, buildCache, readCache, writeCache, visible, snooze, done,
-  withQuestions, writeOutputs, refresh,
+  withQuestions, writeOutputs, refresh, claimRefresh, refreshFile, REFRESH_EVERY_MS,
 };

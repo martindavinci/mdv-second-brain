@@ -211,3 +211,16 @@ test('hook.js process with no global config activates inside a project', async (
   assert.match(JSON.parse(r.stdout).hookSpecificOutput.additionalContext, /workspace=my-app/);
   assert.ok(!fs.existsSync(p.globalFile));
 });
+
+test('findLocal stops at the home folder reached through another form of its path', () => {
+  const t = fs.mkdtempSync(join(os.tmpdir(), 'sb-home-'));
+  const home = join(t, 'home');
+  const global = join(home, '.config', 'mdv-second-brain', 'config.json');
+  fs.mkdirSync(join(home, 'a', 'b'), { recursive: true });
+  fs.mkdirSync(join(global, '..'), { recursive: true });
+  fs.writeFileSync(global, '{}');
+  const link = join(t, 'link');
+  fs.symlinkSync(home, link, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.equal(findLocal(join(link, 'a', 'b'), { home }), null);
+  assert.equal(findLocal(join(link, 'a', 'b'), { home, except: global }), null);
+});

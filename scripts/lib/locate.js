@@ -17,17 +17,25 @@ const ends = (file, tail) => !!file && path.resolve(file).endsWith(path.sep + ta
 const isLocalFile = (file) => ends(file, LOCAL_FILE) || ends(file, FOLDER_FILE);
 const up = (file, n) => (n ? up(path.dirname(file), n - 1) : file);
 const projectOfLocal = (file) => up(path.resolve(file), ends(file, LOCAL_FILE) ? 4 : 3);
-const fold = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
+// Real paths: a folder reached through an 8.3 name (RUNNER~1), a junction or a symlink is still the same folder.
+const real = (p) => {
+  try {
+    return fs.realpathSync.native(p);
+  } catch {
+    return path.resolve(p);
+  }
+};
+const fold = (p) => (process.platform === 'win32' ? real(p).toLowerCase() : real(p));
 const samePath = (a, b) => !!a && !!b && fold(a) === fold(b);
 
 // The search stops at the home folder, whose .config/mdv-second-brain is the global config, never a folder's;
 // `except` is the global config when it lives elsewhere.
-function findLocal(start, { except } = {}) {
+function findLocal(start, { except, home = os.homedir() } = {}) {
   if (!start) return null;
-  const home = os.homedir();
+  const homeKey = fold(home);
   let dir = path.resolve(start);
   for (let i = 0; i < MAX_DEPTH; i++) {
-    const atHome = samePath(dir, home);
+    const atHome = fold(dir) === homeKey;
     for (const f of atHome ? [localConfigFile(dir)] : [localConfigFile(dir), folderConfigFile(dir)]) {
       if (!samePath(f, except) && fs.existsSync(f)) return f;
     }

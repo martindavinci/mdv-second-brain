@@ -21,7 +21,7 @@ CLI: `node "<plugin root>/scripts/brain.js" <command>` — written `brain <comma
   For "only this chat" never map the folder: a new workspace is `brain workspace add <ws> --language <code> [--vault <dir>]`, then `brain attach <ws>`.
 - Quick ("attiva brain con i default", `/brain init --quick` or `$second-brain init --quick`): `brain init --quick --language <code>`, no questions.
 - Off for this chat ("disattiva brain"): `brain detach`.
-Finish with the one line the CLI prints.
+End with the line the CLI prints.
 `init` exit 8 (sandbox cannot write the config): give the user the ways out it lists; `--config-here` only if they pick it; it is unseen outside that folder (multi-folder workspaces: global config).
 Config: only `brain init`/`brain workspace …`, as the user asks; never hand-edit it or drop a setting (e.g. `ignore`) unasked.
 Bootstrap (`/brain bootstrap`, "importa le repo", or `brain status` shows `repos:`): follow `bootstrap.md` next to this file.
@@ -65,4 +65,4 @@ Orient with `brain context` → `brain show "<Name>" --section <heading> --max-c
 - Never touch the agent's own memory files (Claude Code memory, Codex memories).
 
 ## Commands
-`task|issue add|list|show|move|block|unblock|done|discard|delete|sync`, `feature add`, `idea add|list|promote|discard`, `project add|list|rename|relate|playbook|waive|split|merge`, `check`, `attention [snooze|done <id>]`, `bootstrap [--dry-run]`, `plugins` (only when asked), `health [--fix]`, `recap [--week|--month]`, `postmortem add`, `index`, `commit -m`, `status`, `secret set|get|list`, `workspace add|list|map|ignore`, `init`, `attach`, `detach`, `adopt <path> --as <ws>` (dry run; `--apply` once the user confirms the plan).
+`task|issue add|list|show|move|block|unblock|done|discard|delete|sync`, `feature add`, `idea add|list|promote|discard`, `project add|list|rename|relate|playbook|waive|split|merge`, `check`, `attention [snooze|done <id>]`, `bootstrap [--dry-run]`, `plugins` (only when asked), `health [--fix]`, `recap [--week|--month]`, `postmortem add`, `index`, `commit -m`, `status`, `secret set|get|list`, `workspace add|list|map|ignore|attention`, `init`, `attach`, `detach`, `adopt <path> --as <ws>` (dry run; `--apply` once the user confirms the plan).

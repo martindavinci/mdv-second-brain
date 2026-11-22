@@ -160,3 +160,22 @@ test('project_mode_says_unsupported', async () => {
   assert.equal((await run(['--session', 's-p-1', 'checkpoint', '--ask', 'q?'])).code, 2);
   assert.equal(fs.existsSync(join(proj, 'SecondBrain', '.brain', 'attention.json')), false);
 });
+
+test('workspace_attention_sets_and_clears_the_feed_folder', async () => {
+  const m = makeVault();
+  const cli = cliFor(m);
+  const dir = join(m.t, 'feeds');
+  assert.equal((await cli(['workspace', 'attention', 'w', '--feed-dir', dir])).code, 2, 'a missing folder is refused');
+  fs.mkdirSync(dir);
+  const set = await cli(['workspace', 'attention', 'w', '--feed-dir', dir, '--remote-ttl', '3']);
+  assert.equal(set.code, 0, set.err);
+  let a = config.attentionFor(config.loadConfig(m.cfgFile), 'w');
+  assert.deepEqual(a, { outputs: [{ type: 'feed', dir }], remoteTtlHours: 3 });
+  assert.match((await cli(['workspace', 'attention', 'w'])).out, /feeds/);
+  assert.equal((await cli(['workspace', 'attention', 'w', '--remote-ttl', 'soon'])).code, 2);
+  assert.equal((await cli(['workspace', 'attention', 'nope', '--feed-dir', dir])).code, 2);
+  assert.equal((await cli(['workspace', 'attention', 'w', '--no-feed'])).code, 0);
+  a = config.attentionFor(config.loadConfig(m.cfgFile), 'w');
+  assert.deepEqual(a.outputs, []);
+  assert.equal(a.remoteTtlHours, 3, 'the other setting is kept');
+});

@@ -12,7 +12,7 @@ const { resolveWorkspace, projectFor } = require('./lib/resolve');
 const { projectName, parseYmd } = require('./lib/names');
 const { locate, folderConfigFile, LOCAL_VAULT } = require('./lib/locate');
 
-const BOOL = new Set(['json', 'yes', 'blocked', 'open', 'quick', 'apply', 'archive', 'plan', 'here', 'config-here', 'remove', 'dry-run', 'fix', 'day', 'week', 'month', 'refresh', 'remote', 'quiet']);
+const BOOL = new Set(['json', 'yes', 'blocked', 'open', 'quick', 'apply', 'archive', 'plan', 'here', 'config-here', 'remove', 'dry-run', 'fix', 'day', 'week', 'month', 'refresh', 'remote', 'quiet', 'no-feed']);
 const GIT_MODES = ['per-workspace', 'single', 'none', 'host'];
 
 function parseArgs(argv) {
@@ -336,6 +336,32 @@ function cmdWorkspace(env, sub, args) {
       if (!cfg.ignore.includes(p)) cfg.ignore.push(p);
       save();
       return out(env, { ignored: p }, `ignored ${p}`);
+    }
+    // where the attention feed is written (a folder the user made: the plugin never creates it) and how often the
+    // network part runs; with no option, what is set now
+    case 'attention': {
+      const name = requireArg(args[0], 'workspace');
+      if (!cfg.workspaces[name]) throw new CliError(2, `unknown workspace: ${name}`);
+      const ws = cfg.workspaces[name];
+      const next = { ...(ws.attention || {}) };
+      const dir = str(env.flags['feed-dir']);
+      const ttl = str(env.flags['remote-ttl']);
+      if (env.flags['no-feed']) next.outputs = [];
+      if (dir) {
+        const abs = path.resolve(env.cwd, dir);
+        if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) throw new CliError(2, `no folder ${abs}: make it first`);
+        next.outputs = [{ type: 'feed', dir: abs }];
+      }
+      if (ttl) {
+        if (!/^\d+(\.\d+)?$/.test(ttl)) throw new CliError(2, '--remote-ttl takes a number of hours (0 or more)');
+        next.remoteTtlHours = Number(ttl);
+      }
+      const changed = !!(dir || ttl || env.flags['no-feed']);
+      if (changed) ws.attention = next;
+      const a = config.attentionFor(cfg, name);
+      if (changed) save();
+      const feed = a.outputs.length ? a.outputs.map((o) => o.dir).join(', ') : 'none';
+      return out(env, { workspace: name, ...a }, `${name}: feed folder ${feed}; network part every ${a.remoteTtlHours} h`);
     }
     default:
       throw new CliError(2, `unknown workspace command: ${sub || '(none)'}`);

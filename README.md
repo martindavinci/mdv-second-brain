@@ -187,7 +187,7 @@ After each turn the Stop hook starts `brain attention --refresh` in the backgrou
 | `brain project playbook <p> "<playbook>" [--remove]` · `brain project waive <p> <id\|id@folder\|"[[Playbook]]"> [--remove]` | the hub follows a playbook; an intentional difference is waived (a check, a check in one folder, or the whole playbook) |
 | `brain check [<project>]` | the checks of the playbooks a project follows: each failing check with the folders it fails in; playbooks whose `applies_when` matches a repo that does not follow them are suggested |
 | `brain secret set` · `get` · `list` | values in `secrets.local.md`, referenced as `{{secret:KEY}}` |
-| `brain workspace add` · `list` · `map` · `ignore` | edit the config |
+| `brain workspace add` · `list` · `map` · `ignore` · `attention <ws> [--feed-dir <folder>] [--remote-ttl <hours>] [--no-feed]` | edit the config; `attention` sets where the attention feed is written and how often its GitHub part runs |
 | `brain checkpoint --status … --next … --open … --log …` | update this session's section of the daily (safe with parallel sessions); `--ask "<question>"` queues a question for the user in the attention queue |
 | `brain attention [--refresh] [--remote] [--json]` | what waits for you, from the cache; `--refresh` computes it again, `--remote` also asks GitHub and the remotes now; `--json` prints the feed object |
 | `brain attention snooze <id> [--until YYYY-MM-DD]` · `brain attention done <id>` | hide an item until a date (tomorrow by default); clear a question once answered |

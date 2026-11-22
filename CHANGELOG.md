@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Fix: a vault inside a parent repo reached through a different form of its path (a Windows 8.3 short name such as `RUNNER~1`, a junction or symlink, macOS `/var` for `/private/var`) is excluded from that repo again, and host mode commits there again. git prints the canonical root; the plugin now keeps the form it was given, so relative paths no longer walk out of the repo.
+- CI runs the tests on Linux, Windows and macOS with Node 18 (the minimum in `engines`) and 24.
 
 ## 0.5.1 — 2026-11-22
 
